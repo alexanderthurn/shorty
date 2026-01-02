@@ -74,22 +74,36 @@
 
         .btn {
             cursor: pointer;
-            padding: 10px 18px;
+            padding: 8px 12px;
             border: none;
             border-radius: 6px;
             background: #3182ce;
             color: white;
             font-weight: bold;
             transition: background 0.2s;
+            font-size: 0.85rem;
         }
 
         .btn:hover {
             background: #2b6cb0;
         }
 
+        .btn-refresh {
+            background: #38a169;
+        }
+
+        .btn-refresh:hover {
+            background: #2f855a;
+        }
+
         .btn:disabled {
             background: #cbd5e0;
             cursor: not-allowed;
+        }
+
+        .action-cell {
+            display: flex;
+            gap: 5px;
         }
 
         .yt-link {
@@ -280,11 +294,14 @@
                 <td>${item.datum}</td>
                 <td>${mp4Badge} ${srtBadge}</td>
                 <td>
-                    ${isDone ? `<a href="https://youtu.be/${item.youtubeId}" target="_blank" class="yt-link">🎬 Video</a>` : 'Ausstehend'}
+                    ${item.youtubeId ? `<a href="https://youtu.be/${item.youtubeId}" target="_blank" class="yt-link">🎬 Video</a>` : 'Ausstehend'}
                 </td>
-                <td>
-                    <button class="btn" onclick="runUpload(${item.nr})" ${item.youtubeId || !item.hasMp4 ? 'disabled' : ''}>
-                        Upload
+                <td class="action-cell">
+                    <button class="btn" onclick="runAction(${item.nr}, 'upload')" ${item.youtubeId || !item.hasMp4 ? 'disabled' : ''}>
+                        YT Upload
+                    </button>
+                    <button class="btn btn-refresh" onclick="runAction(${item.nr}, 'refresh')" ${!item.youtubeId ? 'disabled' : ''}>
+                        YT Refresh
                     </button>
                 </td>
             </tr>`;
@@ -314,7 +331,7 @@
             document.getElementById('upload-password').value = '';
         }
 
-        function runUpload(nr) {
+        function runAction(nr, type) {
             const modal = document.getElementById('password-modal');
             const input = document.getElementById('upload-password');
             const btn = document.getElementById('confirm-upload-btn');
@@ -322,38 +339,38 @@
             modal.style.display = 'flex';
             input.focus();
 
-            // Click handler setup
             btn.onclick = () => {
                 const password = input.value;
                 if (!password) return;
                 closePasswordModal();
-                executeUpload(nr, password);
+                executeAction(nr, password, type);
             };
 
-            // Enter key support
             input.onkeydown = (e) => {
                 if (e.key === 'Enter') btn.click();
             };
         }
 
-        async function executeUpload(nr, password) {
+        async function executeAction(nr, password, type) {
             const overlay = document.getElementById('loading-overlay');
             overlay.style.display = 'flex';
-            document.getElementById('status-text').innerText = `Video #${nr} wird an YouTube übertragen...`;
+            const statusText = type === 'upload' ? 'wird an YouTube übertragen...' : 'Metadaten werden aktualisiert...';
+            document.getElementById('status-text').innerText = `Video #${nr} ${statusText}`;
 
             try {
                 const fd = new FormData();
                 fd.append('video_num', nr);
                 fd.append('password', password);
 
-                const res = await fetch('upload.php', { method: 'POST', body: fd });
+                const endpoint = type === 'upload' ? 'upload.php' : 'refresh.php';
+                const res = await fetch(endpoint, { method: 'POST', body: fd });
                 const data = await res.json();
 
                 if (data.success) {
-                    showModal("Erfolg!", `Video #${nr} wurde hochgeladen und geplant.`);
+                    showModal("Erfolg!", data.message || `Video #${nr} wurde verarbeitet.`);
                     loadData();
                 } else {
-                    showModal("Fehler beim Upload", data.message);
+                    showModal("Fehler", data.message);
                 }
             } catch (e) {
                 showModal("Fehler", "Netzwerkfehler oder Server-Timeout.");
