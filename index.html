@@ -175,6 +175,45 @@
         .modal-close:hover {
             background: #2b6cb0;
         }
+
+        #password-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            justify-content: center;
+            align-items: center;
+            z-index: 2500;
+            backdrop-filter: blur(3px);
+        }
+
+        .password-input {
+            width: 100%;
+            padding: 12px;
+            margin: 15px 0;
+            border: 1px solid #cbd5e0;
+            border-radius: 6px;
+            font-size: 1rem;
+            box-sizing: border-box;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .btn-cancel {
+            background: #e2e8f0;
+            color: #4a5568;
+        }
+
+        .btn-cancel:hover {
+            background: #cbd5e0;
+        }
     </style>
 </head>
 
@@ -190,6 +229,18 @@
             <h2 id="modal-title">Hinweis</h2>
             <p id="modal-message"></p>
             <button class="modal-close" onclick="closeModal()">OK</button>
+        </div>
+    </div>
+
+    <div id="password-modal">
+        <div class="modal-content">
+            <h2>🔑 Autorisierung</h2>
+            <p>Bitte Passwort für Upload eingeben:</p>
+            <input type="password" id="upload-password" class="password-input" placeholder="Passwort...">
+            <div class="btn-group">
+                <button class="modal-close btn-cancel" onclick="closePasswordModal()">Abbrechen</button>
+                <button class="modal-close" id="confirm-upload-btn">Upload starten</button>
+            </div>
         </div>
     </div>
 
@@ -258,10 +309,34 @@
             document.getElementById('modal-overlay').style.display = 'none';
         }
 
-        async function runUpload(nr) {
-            const password = prompt("Bitte Passwort für Upload eingeben:");
-            if (!password) return;
+        function closePasswordModal() {
+            document.getElementById('password-modal').style.display = 'none';
+            document.getElementById('upload-password').value = '';
+        }
 
+        function runUpload(nr) {
+            const modal = document.getElementById('password-modal');
+            const input = document.getElementById('upload-password');
+            const btn = document.getElementById('confirm-upload-btn');
+
+            modal.style.display = 'flex';
+            input.focus();
+
+            // Click handler setup
+            btn.onclick = () => {
+                const password = input.value;
+                if (!password) return;
+                closePasswordModal();
+                executeUpload(nr, password);
+            };
+
+            // Enter key support
+            input.onkeydown = (e) => {
+                if (e.key === 'Enter') btn.click();
+            };
+        }
+
+        async function executeUpload(nr, password) {
             const overlay = document.getElementById('loading-overlay');
             overlay.style.display = 'flex';
             document.getElementById('status-text').innerText = `Video #${nr} wird an YouTube übertragen...`;
