@@ -166,11 +166,11 @@
                 <td>${item.datum}</td>
                 <td>${mp4Badge} ${srtBadge}</td>
                 <td>
-                    ${isDone ? `<a href="https://youtu.be/${item.youtubeId}" target="_blank" class="yt-link">🎬 Video</a>` : '⏳ Ausstehend'}
+                    ${isDone ? `<a href="https://youtu.be/${item.youtubeId}" target="_blank" class="yt-link">🎬 Video</a>` : 'Ausstehend'}
                 </td>
                 <td>
-                    <button class="btn" onclick="runUpload(${item.nr})" ${isDone || !item.hasMp4 ? 'disabled' : ''}>
-                        ${isDone ? 'Erledigt' : '🚀 Upload'}
+                    <button class="btn" onclick="runUpload(${item.nr})" ${item.youtubeId || !item.hasMp4 ? 'disabled' : ''}>
+                        Upload
                     </button>
                 </td>
             </tr>`;
