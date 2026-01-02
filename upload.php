@@ -50,7 +50,11 @@ try {
 
     $fileId = $files->getFiles()[0]->getId();
     $content = $drive->files->get($fileId, ['alt' => 'media']);
-    $tempFile = __DIR__ . '/temp_' . $videoNum . '.mp4';
+    $tempDir = __DIR__ . '/temp';
+    if (!is_dir($tempDir)) {
+        mkdir($tempDir, 0777, true);
+    }
+    $tempFile = $tempDir . '/temp_' . $videoNum . '.mp4';
     file_put_contents($tempFile, $content->getBody()->getContents());
 
     // 4. YouTube Upload
@@ -84,7 +88,7 @@ try {
     $resourceId->setVideoId($videoId);
     $playlistSnippet->setResourceId($resourceId);
     $playlistItem->setSnippet($playlistSnippet);
-    $youtube->playlistItems . insert('snippet', $playlistItem);
+    $youtube->playlistItems->insert('snippet', $playlistItem);
 
     // --- ÄNDERUNG HIER: Nur die Video-ID zurück ins Sheet schreiben ---
     $values = [[$videoId]]; // Hier wurde das Präfix "https://youtu.be/" entfernt

@@ -18,9 +18,9 @@ function getClient()
 
     // Diese Scopes benötigen wir für den Zugriff
     $client->addScope([
-        'https://www.googleapis.com/auth/spreadsheets.readonly',
+        'https://www.googleapis.com/auth/spreadsheets',
         'https://www.googleapis.com/auth/drive.readonly',
-        'https://www.googleapis.com/auth/youtube.upload'
+        'https://www.googleapis.com/auth/youtube'
     ]);
 
     $client->setAccessType('offline');

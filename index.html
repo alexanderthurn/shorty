@@ -114,12 +114,66 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.8);
+            background: rgba(0, 0, 0, 0.85);
             color: white;
             justify-content: center;
             align-items: center;
             z-index: 1000;
             flex-direction: column;
+            backdrop-filter: blur(5px);
+        }
+
+        #modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+            backdrop-filter: blur(3px);
+        }
+
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 16px;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            position: relative;
+            color: #333;
+            text-align: center;
+        }
+
+        .modal-content h2 {
+            margin-top: 0;
+            color: #2c3e50;
+        }
+
+        .modal-content p {
+            line-height: 1.6;
+            margin-bottom: 20px;
+            word-break: break-all;
+        }
+
+        .modal-close {
+            background: #3182ce;
+            color: white;
+            border: none;
+            padding: 10px 25px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 1rem;
+            transition: background 0.2s;
+        }
+
+        .modal-close:hover {
+            background: #2b6cb0;
         }
     </style>
 </head>
@@ -129,6 +183,14 @@
     <div id="loading-overlay">
         <h2 id="status-text">Upload läuft...</h2>
         <p>Bitte das Tab nicht schließen.</p>
+    </div>
+
+    <div id="modal-overlay">
+        <div class="modal-content">
+            <h2 id="modal-title">Hinweis</h2>
+            <p id="modal-message"></p>
+            <button class="modal-close" onclick="closeModal()">OK</button>
+        </div>
     </div>
 
     <div class="container">
@@ -145,11 +207,12 @@
 
                 let html = `<table><thead><tr><th>Nr</th><th>Titel (Sheet)</th><th>Plan-Datum</th><th>Drive-Files</th><th>YouTube</th><th>Aktion</th></tr></thead><tbody>`;
 
+                const nextPending = [...json.data].reverse().find(item => !item.isUploaded);
                 let scrolled = false;
 
                 json.data.forEach(item => {
                     const isDone = item.isUploaded;
-                    const isNext = !isDone && item.hasMp4 && !scrolled;
+                    const isNext = nextPending && item.nr === nextPending.nr;
                     if (isNext) scrolled = true;
 
                     const mp4Badge = item.hasMp4
@@ -185,6 +248,16 @@
             } catch (e) { content.innerHTML = "Fehler beim Laden: " + e.message; }
         }
 
+        function showModal(title, message) {
+            document.getElementById('modal-title').innerText = title;
+            document.getElementById('modal-message').innerText = message;
+            document.getElementById('modal-overlay').style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.getElementById('modal-overlay').style.display = 'none';
+        }
+
         async function runUpload(nr) {
             const password = prompt("Bitte Passwort für Upload eingeben:");
             if (!password) return;
@@ -202,13 +275,13 @@
                 const data = await res.json();
 
                 if (data.success) {
-                    alert(`Erfolg! Video #${nr} wurde hochgeladen und geplant.`);
+                    showModal("Erfolg!", `Video #${nr} wurde hochgeladen und geplant.`);
                     loadData();
                 } else {
-                    alert("Fehler beim Upload: " + data.message);
+                    showModal("Fehler beim Upload", data.message);
                 }
             } catch (e) {
-                alert("Netzwerkfehler oder Server-Timeout.");
+                showModal("Fehler", "Netzwerkfehler oder Server-Timeout.");
             } finally {
                 overlay.style.display = 'none';
             }
