@@ -13,8 +13,12 @@ function getClient()
 {
     $client = new Google\Client();
 
-    // Nutzt direkt die Datei von Google
-    $client->setAuthConfig(__DIR__ . '/client_secret.json');
+    // client_secret.json laden und "google"-Sektion (ehemals "web") extrahieren
+    $authData = json_decode(file_get_contents(__DIR__ . '/client_secret.json'), true);
+    if (!isset($authData['google'])) {
+        throw new Exception("'google' Sektion fehlt in client_secret.json");
+    }
+    $client->setAuthConfig($authData['google']);
 
     // Diese Scopes benötigen wir für den Zugriff
     $client->setScopes([

@@ -125,6 +125,15 @@
             color: #4a5568;
         }
 
+        .bulk-actions .btn-x {
+            background: #000;
+            color: white;
+        }
+
+        .bulk-actions .btn-x:hover {
+            background: #333;
+        }
+
         .checkbox-col {
             width: 40px;
             text-align: center;
@@ -293,8 +302,9 @@
 
         <div class="bulk-actions" id="bulk-bar" style="display:none;">
             <span id="selected-count">0 Videos ausgewählt</span>
-            <button class="btn" onclick="runBulkAction('upload')">Bulk Upload</button>
-            <button class="btn btn-refresh" onclick="runBulkAction('refresh')">Bulk Refresh</button>
+            <button class="btn" onclick="runBulkAction('upload')">Bulk YouTube Upload</button>
+            <button class="btn btn-refresh" onclick="runBulkAction('refresh')">Bulk YouTube Refresh</button>
+            <button class="btn btn-x" onclick="runBulkAction('x_post')">Bulk X Post</button>
             <button class="btn btn-cancel" onclick="deselectAll()" style="padding: 8px 12px;">Auswahl aufheben</button>
         </div>
 
@@ -338,7 +348,7 @@
 
                 let html = `<table><thead><tr>
                     <th class="checkbox-col"><input type="checkbox" id="select-all" onclick="toggleAll(this)"></th>
-                    <th>Nr</th><th>Titel (Sheet)</th><th>Plan-Datum</th><th>Drive-Files</th><th>YouTube</th><th>Aktion</th>
+                    <th>Nr</th><th>Titel (Sheet)</th><th>Plan-Datum</th><th>Drive-Files</th><th>YouTube</th><th>X-Twitter</th><th>Aktion</th>
                 </tr></thead><tbody>`;
 
                 json.data.forEach(item => {
@@ -363,12 +373,18 @@
                 <td>
                     ${item.youtubeId ? `<a href="https://youtu.be/${item.youtubeId}" target="_blank" class="yt-link">🎬 Video</a>` : 'Ausstehend'}
                 </td>
+                <td>
+                    ${item.xTweetId ? `<a href="https://x.com/i/status/${item.xTweetId}" target="_blank" class="sheet-link">🐦 Tweet</a>` : 'Ausstehend'}
+                </td>
                 <td class="action-cell">
-                    <button class="btn" onclick="runAction(${item.nr}, 'upload')" ${item.youtubeId || !item.hasMp4 ? 'disabled' : ''}>
-                        YT Upload
+                    <button class="btn" onclick="runAction(${item.nr}, 'upload')" ${item.youtubeId || !item.hasMp4 ? 'disabled' : ''} title="Upload to YouTube">
+                        YT Up
                     </button>
-                    <button class="btn btn-refresh" onclick="runAction(${item.nr}, 'refresh')" ${!item.youtubeId ? 'disabled' : ''}>
-                        YT Refresh
+                    <button class="btn btn-refresh" onclick="runAction(${item.nr}, 'refresh')" ${!item.youtubeId ? 'disabled' : ''} title="Refresh YouTube Metadata">
+                        YT Ref
+                    </button>
+                    <button class="btn" style="background:#000;" onclick="runAction(${item.nr}, 'x_post')" ${item.xTweetId || !item.hasMp4 ? 'disabled' : ''} title="Post to X (Twitter)">
+                        X Post
                     </button>
                 </td>
             </tr>`;
@@ -427,7 +443,12 @@
                         const fd = new FormData();
                         fd.append('video_num', nr);
                         fd.append('password', password);
-                        const endpoint = type === 'upload' ? 'upload.php' : 'refresh.php';
+                        const endpointMap = {
+                            'upload': 'upload.php',
+                            'refresh': 'refresh.php',
+                            'x_post': 'x_post.php'
+                        };
+                        const endpoint = endpointMap[type];
 
                         const res = await fetch(endpoint, { method: 'POST', body: fd });
                         const data = await res.json();
@@ -476,16 +497,24 @@
         async function executeAction(nr, password, type) {
             const overlay = document.getElementById('loading-overlay');
             overlay.style.display = 'flex';
-            const statusText = type === 'upload' ? 'wird an YouTube übertragen...' : 'Metadaten werden aktualisiert...';
-            document.getElementById('status-text').innerText = `Video #${nr} ${statusText}`;
+            const actionText = {
+                'upload': 'wird an YouTube übertragen...',
+                'refresh': 'Metadaten werden aktualisiert...',
+                'x_post': 'wird auf X gepostet...'
+            };
+            document.getElementById('status-text').innerText = `Video #${nr} ${actionText[type]}`;
 
             try {
                 const fd = new FormData();
                 fd.append('video_num', nr);
                 fd.append('password', password);
 
-                const endpoint = type === 'upload' ? 'upload.php' : 'refresh.php';
-                const res = await fetch(endpoint, { method: 'POST', body: fd });
+                const endpointMap = {
+                    'upload': 'upload.php',
+                    'refresh': 'refresh.php',
+                    'x_post': 'x_post.php'
+                };
+                const res = await fetch(endpointMap[type], { method: 'POST', body: fd });
                 const data = await res.json();
 
                 if (data.success) {

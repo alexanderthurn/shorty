@@ -7,8 +7,8 @@ try {
     $sheets = new Google\Service\Sheets($client);
     $drive = new Google\Service\Drive($client);
 
-    // 1. Daten aus Sheet holen (inkl. Spalte H für Video-ID)
-    $range = SHEET_NAME . '!A2:H420';
+    // 1. Daten aus Sheet holen (inkl. Spalte I für X-Status)
+    $range = SHEET_NAME . '!A2:I420';
     $response = $sheets->spreadsheets_values->get(SHEET_ID, $range);
     $sheetData = $response->getValues() ?: [];
 
@@ -54,6 +54,7 @@ try {
             'hasSrt' => isset($filesFound[$nr]['srt']),
             'isUploaded' => !empty($row[7]),
             'youtubeId' => $row[7] ?? null,
+            'xTweetId' => $row[8] ?? null, // Spalte I = Index 8
             // Links
             'sheetLink' => "https://docs.google.com/spreadsheets/d/" . SHEET_ID . "/edit#range=A$sheetRow",
             'mp4Link' => isset($filesFound[$nr]['mp4']) ? "https://drive.google.com/file/d/" . $filesFound[$nr]['mp4']['id'] . "/view" : null,
