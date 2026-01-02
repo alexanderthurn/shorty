@@ -179,7 +179,7 @@
                 content.innerHTML = html + '</tbody></table>';
 
                 if (scrolled) {
-                    document.getElementById('next-video').scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    document.getElementById('next-video').scrollIntoView({ behavior: 'auto', block: 'center' });
                 }
 
             } catch (e) { content.innerHTML = "Fehler beim Laden: " + e.message; }
