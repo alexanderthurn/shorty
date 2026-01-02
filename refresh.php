@@ -10,7 +10,11 @@ try {
         throw new Exception("Keine Video-Nummer übergeben.");
     }
 
-    if (!isset($_POST['password']) || $_POST['password'] !== UPLOAD_PASSWORD) {
+    // Passwort-Prüfung gegen Hash in client_secret.json
+    $secrets = json_decode(file_get_contents(__DIR__ . '/client_secret.json'), true);
+    $expectedHash = $secrets['security']['upload_password_sha256'] ?? '';
+
+    if (!isset($_POST['password']) || $_POST['password'] !== $expectedHash) {
         throw new Exception("Falsches Passwort. Zugriff verweigert.");
     }
 

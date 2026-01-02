@@ -134,6 +134,23 @@
             background: #333;
         }
 
+        .header-area {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .btn-logout {
+            background: #e53e3e;
+            padding: 5px 10px;
+            font-size: 0.8rem;
+        }
+
+        .btn-logout:hover {
+            background: #c53030;
+        }
+
         .checkbox-col {
             width: 40px;
             text-align: center;
@@ -298,7 +315,11 @@
     </div>
 
     <div class="container">
-        <h1>🚀 Bitcoin Jahr 2026 Manager</h1>
+        <div class="header-area">
+            <h1>🚀 Bitcoin Jahr 2026 Manager</h1>
+            <button class="btn btn-logout" id="logout-btn" style="display:none;" onclick="logout()">Logout / PW
+                löschen</button>
+        </div>
 
         <div class="bulk-actions" id="bulk-bar" style="display:none;">
             <span id="selected-count">0 Videos ausgewählt</span>
@@ -312,6 +333,19 @@
     </div>
 
     <script>
+        // Helper: SHA-256 Hash erzeugen
+        async function sha256(message) {
+            const msgBuffer = new TextEncoder().encode(message);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        function logout() {
+            localStorage.removeItem('upload_pw_hash');
+            location.reload();
+        }
+
         function toggleAll(source) {
             const checkboxes = document.querySelectorAll('.video-checkbox');
             checkboxes.forEach(cb => cb.checked = source.checked);
@@ -342,6 +376,9 @@
             try {
                 const response = await fetch('list.php');
                 const json = await response.json();
+
+                // Logout Button anzeigen wenn Passwort gespeichert
+                document.getElementById('logout-btn').style.display = localStorage.getItem('upload_pw_hash') ? 'block' : 'none';
 
                 const nextPending = [...json.data].reverse().find(item => !item.isUploaded);
                 let scrolled = false;
@@ -417,87 +454,93 @@
             document.getElementById('upload-password').value = '';
         }
 
-        function runBulkAction(type) {
+        async function getAuthHash() {
+            let hash = localStorage.getItem('upload_pw_hash');
+            if (hash) return hash;
+
+            return new Promise((resolve) => {
+                const modal = document.getElementById('password-modal');
+                const input = document.getElementById('upload-password');
+                const btn = document.getElementById('confirm-upload-btn');
+
+                modal.style.display = 'flex';
+                input.focus();
+
+                const handler = async () => {
+                    const password = input.value;
+                    if (!password) return;
+
+                    const hashed = await sha256(password);
+                    localStorage.setItem('upload_pw_hash', hashed);
+
+                    closePasswordModal();
+                    document.getElementById('logout-btn').style.display = 'block';
+
+                    btn.removeEventListener('click', handler);
+                    input.removeEventListener('keydown', keyHandler);
+                    resolve(hashed);
+                };
+
+                const keyHandler = (e) => {
+                    if (e.key === 'Enter') handler();
+                };
+
+                btn.addEventListener('click', handler);
+                input.addEventListener('keydown', keyHandler);
+            });
+        }
+
+        async function runBulkAction(type) {
             const checked = document.querySelectorAll('.video-checkbox:checked');
             const ids = Array.from(checked).map(cb => cb.value);
             if (ids.length === 0) return;
 
-            const modal = document.getElementById('password-modal');
-            const input = document.getElementById('upload-password');
-            const btn = document.getElementById('confirm-upload-btn');
+            const hash = await getAuthHash();
+            if (!hash) return;
 
-            modal.style.display = 'flex';
-            input.focus();
+            // Bulk Execution one by one
+            const overlay = document.getElementById('loading-overlay');
+            overlay.style.display = 'flex';
 
-            btn.onclick = async () => {
-                const password = input.value;
-                if (!password) return;
-                closePasswordModal();
+            for (let i = 0; i < ids.length; i++) {
+                const nr = ids[i];
+                document.getElementById('status-text').innerText = `[${i + 1}/${ids.length}] Video #${nr} wird verarbeitet...`;
 
-                // Bulk Execution one by one
-                const overlay = document.getElementById('loading-overlay');
-                overlay.style.display = 'flex';
+                try {
+                    const fd = new FormData();
+                    fd.append('video_num', nr);
+                    fd.append('password', hash);
+                    const endpointMap = {
+                        'upload': 'upload.php',
+                        'refresh': 'refresh.php',
+                        'x_post': 'x_post.php'
+                    };
+                    const res = await fetch(endpointMap[type], { method: 'POST', body: fd });
+                    const data = await res.json();
 
-                for (let i = 0; i < ids.length; i++) {
-                    const nr = ids[i];
-                    document.getElementById('status-text').innerText = `[${i + 1}/${ids.length}] Video #${nr} wird verarbeitet...`;
-
-                    try {
-                        const fd = new FormData();
-                        fd.append('video_num', nr);
-                        fd.append('password', password);
-                        const endpointMap = {
-                            'upload': 'upload.php',
-                            'refresh': 'refresh.php',
-                            'x_post': 'x_post.php'
-                        };
-                        const endpoint = endpointMap[type];
-
-                        const res = await fetch(endpoint, { method: 'POST', body: fd });
-                        const data = await res.json();
-
-                        if (!data.success) {
-                            showModal("Abbruch während Bulk", `Fehler bei Video #${nr}: ` + data.message);
-                            break;
-                        }
-                    } catch (e) {
-                        showModal("Netzwerkfehler", `Abbruch bei Video #${nr}`);
+                    if (!data.success) {
+                        showModal("Abbruch während Bulk", `Fehler bei Video #${nr}: ` + data.message);
                         break;
                     }
+                } catch (e) {
+                    showModal("Netzwerkfehler", `Abbruch bei Video #${nr}`);
+                    break;
                 }
+            }
 
-                overlay.style.display = 'none';
-                deselectAll();
-                loadData();
-                showModal("Bulk Fertig", `${ids.length} Videos wurden verarbeitet.`);
-            };
-
-            input.onkeydown = (e) => {
-                if (e.key === 'Enter') btn.click();
-            };
+            overlay.style.display = 'none';
+            deselectAll();
+            loadData();
+            showModal("Bulk Fertig", `${ids.length} Videos wurden verarbeitet.`);
         }
 
-        function runAction(nr, type) {
-            const modal = document.getElementById('password-modal');
-            const input = document.getElementById('upload-password');
-            const btn = document.getElementById('confirm-upload-btn');
-
-            modal.style.display = 'flex';
-            input.focus();
-
-            btn.onclick = () => {
-                const password = input.value;
-                if (!password) return;
-                closePasswordModal();
-                executeAction(nr, password, type);
-            };
-
-            input.onkeydown = (e) => {
-                if (e.key === 'Enter') btn.click();
-            };
+        async function runAction(nr, type) {
+            const hash = await getAuthHash();
+            if (!hash) return;
+            executeAction(nr, hash, type);
         }
 
-        async function executeAction(nr, password, type) {
+        async function executeAction(nr, hash, type) {
             const overlay = document.getElementById('loading-overlay');
             overlay.style.display = 'flex';
             const actionText = {
@@ -510,7 +553,7 @@
             try {
                 const fd = new FormData();
                 fd.append('video_num', nr);
-                fd.append('password', password);
+                fd.append('password', hash);
 
                 const endpointMap = {
                     'upload': 'upload.php',
@@ -525,6 +568,10 @@
                     loadData();
                 } else {
                     showModal("Fehler", data.message);
+                    if (data.message.includes("Passwort")) {
+                        localStorage.removeItem('upload_pw_hash');
+                        location.reload();
+                    }
                 }
             } catch (e) {
                 showModal("Fehler", "Netzwerkfehler oder Server-Timeout.");
