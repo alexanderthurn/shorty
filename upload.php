@@ -18,15 +18,23 @@ try {
 
     // 1. Daten aus Google Sheet holen
     $service = new Google\Service\Sheets($client);
-    $response = $service->spreadsheets_values->get(SHEET_ID, SHEET_NAME . '!A2:F420');
+    $response = $service->spreadsheets_values->get(SHEET_ID, SHEET_NAME . '!A2:H420');
     $rows = $response->getValues();
     $metadata = null;
 
     foreach ($rows as $row) {
         if (isset($row[0]) && $row[0] == $videoNum) {
+            // Tags extrahieren (Spalte G = Index 6)
+            $tagString = $row[6] ?? '';
+            $tags = array_filter(array_map('trim', explode(',', $tagString)));
+            if (empty($tags)) {
+                $tags = ['Bitcoin'];
+            }
+
             $metadata = [
                 'title' => "Tag $videoNum - " . ($row[2] ?? 'Bitcoin Short #' . $videoNum),
-                'desc' => ''
+                'desc' => $row[3] ?? '', // Spalte D = Index 3
+                'tags' => $tags
             ];
             break;
         }
@@ -43,12 +51,17 @@ try {
     // 3. Datei von Google Drive laden
     $drive = new Google\Service\Drive($client);
     $fileName = $videoNum . '.mp4';
-    $files = $drive->files->listFiles(['q' => "'" . FOLDER_ID . "' in parents and name = '$fileName' and trashed = false"]);
+    $files = $drive->files->listFiles([
+        'q' => "'" . FOLDER_ID . "' in parents and name = '$fileName' and trashed = false",
+        'fields' => 'files(id, name)'
+    ]);
 
     if (count($files->getFiles()) == 0)
         throw new Exception("Datei $fileName nicht gefunden.");
 
-    $fileId = $files->getFiles()[0]->getId();
+    $driveFile = $files->getFiles()[0];
+    $fileId = $driveFile->getId();
+
     $content = $drive->files->get($fileId, ['alt' => 'media']);
     $tempDir = __DIR__ . '/temp';
     if (!is_dir($tempDir)) {
@@ -64,6 +77,9 @@ try {
     $snippet = new Google\Service\YouTube\VideoSnippet();
     $snippet->setTitle($metadata['title']);
     $snippet->setDescription($metadata['desc']);
+    $snippet->setTags($metadata['tags']);
+    $snippet->setDefaultLanguage('de');
+    $snippet->setDefaultAudioLanguage('de');
     $video->setSnippet($snippet);
 
     $status = new Google\Service\YouTube\VideoStatus();
@@ -71,7 +87,11 @@ try {
     $status->setPublishAt($publishStr);
     $video->setStatus($status);
 
-    $result = $youtube->videos->insert('snippet,status', $video, [
+    $recordingDetails = new Google\Service\YouTube\VideoRecordingDetails();
+    $recordingDetails->setRecordingDate($publishStr);
+    $video->setRecordingDetails($recordingDetails);
+
+    $result = $youtube->videos->insert('snippet,status,recordingDetails', $video, [
         'data' => file_get_contents($tempFile),
         'mimeType' => 'video/mp4',
         'uploadType' => 'multipart'
@@ -90,12 +110,12 @@ try {
     $playlistItem->setSnippet($playlistSnippet);
     $youtube->playlistItems->insert('snippet', $playlistItem);
 
-    // --- ÄNDERUNG HIER: Nur die Video-ID zurück ins Sheet schreiben ---
-    $values = [[$videoId]]; // Hier wurde das Präfix "https://youtu.be/" entfernt
+    // --- ÄNDERUNG HIER: Nur die Video-ID zurück ins Sheet schreiben (Jetzt Spalte H) ---
+    $values = [[$videoId]];
     $body = new Google\Service\Sheets\ValueRange(['values' => $values]);
     $params = ['valueInputOption' => 'RAW'];
     $rowInSheet = $videoNum + 1;
-    $service->spreadsheets_values->update(SHEET_ID, SHEET_NAME . "!G$rowInSheet", $body, $params);
+    $service->spreadsheets_values->update(SHEET_ID, SHEET_NAME . "!H$rowInSheet", $body, $params);
 
     // 5. Optionaler SRT Upload
     $srtName = $videoNum . '.srt';
