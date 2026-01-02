@@ -7,8 +7,8 @@ try {
     $sheets = new Google\Service\Sheets($client);
     $drive = new Google\Service\Drive($client);
 
-    // 1. Daten aus Sheet holen (inkl. Spalte I für X-Status)
-    $range = SHEET_NAME . '!A2:I420';
+    // 1. Daten aus Sheet holen (inkl. Spalte J für Media-ID)
+    $range = SHEET_NAME . '!A2:J420';
     $response = $sheets->spreadsheets_values->get(SHEET_ID, $range);
     $sheetData = $response->getValues() ?: [];
 
@@ -42,20 +42,18 @@ try {
 
         // Datum berechnen
         $pDate = (new DateTime('2026-01-01 21:21:00'))->modify('+' . ($nr - 1) . ' days');
-
-        // Zeile im Sheet (Index 0 = Zeile 2)
         $sheetRow = $index + 2;
 
         $results[] = [
             'nr' => $nr,
-            'titel' => "Tag $nr - " . ($row[2] ?? 'Kein Titel'),
+            'titel' => "Tag $nr - " . ($row[2] ?? 'Kein Titel'), // Spalte C
             'datum' => $pDate->format('d.m.Y H:i'),
             'hasMp4' => isset($filesFound[$nr]['mp4']),
             'hasSrt' => isset($filesFound[$nr]['srt']),
             'isUploaded' => !empty($row[7]),
             'youtubeId' => $row[7] ?? null,
-            'xTweetId' => $row[8] ?? null, // Spalte I = Index 8
-            // Links
+            'xTweetId' => $row[8] ?? null,  // Spalte I
+            'xMediaId' => $row[9] ?? null,  // Spalte J
             'sheetLink' => "https://docs.google.com/spreadsheets/d/" . SHEET_ID . "/edit#range=A$sheetRow",
             'mp4Link' => isset($filesFound[$nr]['mp4']) ? "https://drive.google.com/file/d/" . $filesFound[$nr]['mp4']['id'] . "/view" : null,
             'srtLink' => isset($filesFound[$nr]['srt']) ? "https://drive.google.com/file/d/" . $filesFound[$nr]['srt']['id'] . "/view" : null

@@ -302,7 +302,7 @@
 
         <div class="bulk-actions" id="bulk-bar" style="display:none;">
             <span id="selected-count">0 Videos ausgewählt</span>
-            <button class="btn" onclick="runBulkAction('upload')">Bulk YouTube Upload</button>
+            <button class="btn" onclick="runBulkAction('upload')">Bulk YT Short</button>
             <button class="btn btn-refresh" onclick="runBulkAction('refresh')">Bulk YouTube Refresh</button>
             <button class="btn btn-x" onclick="runBulkAction('x_post')">Bulk X Post</button>
             <button class="btn btn-cancel" onclick="deselectAll()" style="padding: 8px 12px;">Auswahl aufheben</button>
@@ -378,13 +378,16 @@
                 </td>
                 <td class="action-cell">
                     <button class="btn" onclick="runAction(${item.nr}, 'upload')" ${item.youtubeId || !item.hasMp4 ? 'disabled' : ''} title="Upload to YouTube">
-                        YT Up
+                        YT Short
                     </button>
                     <button class="btn btn-refresh" onclick="runAction(${item.nr}, 'refresh')" ${!item.youtubeId ? 'disabled' : ''} title="Refresh YouTube Metadata">
                         YT Ref
                     </button>
-                    <button class="btn" style="background:#000;" onclick="runAction(${item.nr}, 'x_post')" ${item.xTweetId || !item.hasMp4 ? 'disabled' : ''} title="Post to X (Twitter)">
-                        X Post
+                    <button class="btn" style="${item.xMediaId ? 'background:#3182ce;' : 'background:#000;'}" 
+                            onclick="runAction(${item.nr}, 'x_post')" 
+                            ${item.xTweetId || !item.hasMp4 ? 'disabled' : ''} 
+                            title="${item.xMediaId ? 'X Video wird noch verarbeitet - klicken zum Prüfen' : 'Post to X (Twitter)'}">
+                        ${item.xMediaId ? 'X Ref' : 'X Post'}
                     </button>
                 </td>
             </tr>`;
