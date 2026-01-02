@@ -20,10 +20,11 @@ function getClient()
     $client->setScopes([
         'https://www.googleapis.com/auth/spreadsheets',
         'https://www.googleapis.com/auth/drive.readonly',
-        'https://www.googleapis.com/auth/youtube'
+        'https://www.googleapis.com/auth/youtube.force-ssl'
     ]);
 
     $client->setAccessType('offline');
+    $client->setApprovalPrompt('force');
     $client->setPrompt('select_account consent');
 
     $tokenPath = __DIR__ . '/token.json';
