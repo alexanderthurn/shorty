@@ -25,8 +25,8 @@ try {
     foreach ($rows as $row) {
         if (isset($row[0]) && $row[0] == $videoNum) {
             $metadata = [
-                'title' => $row[2] ?? 'Bitcoin Short #' . $videoNum,
-                'desc' => $row[5] ?? ''
+                'title' => "Tag $videoNum - " . ($row[2] ?? 'Bitcoin Short #' . $videoNum),
+                'desc' => ''
             ];
             break;
         }
@@ -74,6 +74,17 @@ try {
     ]);
 
     $videoId = $result->getId();
+
+    // 4.5 Video zur Playlist hinzufügen
+    $playlistItem = new Google\Service\YouTube\PlaylistItem();
+    $playlistSnippet = new Google\Service\YouTube\PlaylistItemSnippet();
+    $playlistSnippet->setPlaylistId(PLAYLIST_ID);
+    $resourceId = new Google\Service\YouTube\ResourceId();
+    $resourceId->setKind('youtube#video');
+    $resourceId->setVideoId($videoId);
+    $playlistSnippet->setResourceId($resourceId);
+    $playlistItem->setSnippet($playlistSnippet);
+    $youtube->playlistItems . insert('snippet', $playlistItem);
 
     // --- ÄNDERUNG HIER: Nur die Video-ID zurück ins Sheet schreiben ---
     $values = [[$videoId]]; // Hier wurde das Präfix "https://youtu.be/" entfernt

@@ -5,6 +5,7 @@ require_once 'vendor/autoload.php';
 define('SHEET_ID', '15mWMEw0JrlCdnIABrUcvTfTCuLRE1coDFCg78xywIFA');
 define('FOLDER_ID', '13HVjxYsIzRape4HmeivmdeaqMenNyPFO');
 define('SHEET_NAME', 'Themen');
+define('PLAYLIST_ID', 'PLizsgj8iO0fNQfYI7oGVGXG6XN1d4jBXP');
 define('UPLOAD_PASSWORD', 'anderthurn'); // Password for the upload button
 // ---------------------------
 

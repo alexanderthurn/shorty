@@ -45,7 +45,7 @@ try {
 
         $results[] = [
             'nr' => $nr,
-            'titel' => $row[2] ?? 'Kein Titel',
+            'titel' => "Tag $nr - " . ($row[2] ?? 'Kein Titel'),
             'datum' => $pDate->format('d.m.Y H:i'),
             'hasMp4' => isset($filesFound[$nr]['mp4']),
             'hasSrt' => isset($filesFound[$nr]['srt']),
@@ -60,7 +60,8 @@ try {
 
     // Sortierung: Neueste oben
     usort($results, function ($a, $b) {
-        return $b['nr'] <=> $a['nr']; });
+        return $b['nr'] <=> $a['nr'];
+    });
 
     echo json_encode(['success' => true, 'data' => $results]);
 
