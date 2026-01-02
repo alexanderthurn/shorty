@@ -17,7 +17,7 @@ function getClient()
     $client->setAuthConfig(__DIR__ . '/client_secret.json');
 
     // Diese Scopes benötigen wir für den Zugriff
-    $client->addScope([
+    $client->setScopes([
         'https://www.googleapis.com/auth/spreadsheets',
         'https://www.googleapis.com/auth/drive.readonly',
         'https://www.googleapis.com/auth/youtube'
