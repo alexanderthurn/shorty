@@ -2,17 +2,19 @@
 require_once 'vendor/autoload.php';
 
 // --- DEINE KONFIGURATION ---
-define('SHEET_ID', '15mWMEw0JrlCdnIABrUcvTfTCuLRE1coDFCg78xywIFA'); 
+define('SHEET_ID', '15mWMEw0JrlCdnIABrUcvTfTCuLRE1coDFCg78xywIFA');
 define('FOLDER_ID', '13HVjxYsIzRape4HmeivmdeaqMenNyPFO');
-define('SHEET_NAME', 'Themen'); 
+define('SHEET_NAME', 'Themen');
+define('UPLOAD_PASSWORD', 'anderthurn'); // Password for the upload button
 // ---------------------------
 
-function getClient() {
+function getClient()
+{
     $client = new Google\Client();
-    
+
     // Nutzt direkt die Datei von Google
     $client->setAuthConfig(__DIR__ . '/client_secret.json');
-    
+
     // Diese Scopes benötigen wir für den Zugriff
     $client->addScope([
         'https://www.googleapis.com/auth/spreadsheets.readonly',

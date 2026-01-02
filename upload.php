@@ -1,6 +1,6 @@
 <?php
 header('Content-Type: application/json; charset=utf-8');
-set_time_limit(600); 
+set_time_limit(600);
 
 require_once 'config.php';
 
@@ -8,6 +8,10 @@ try {
     $client = getClient();
     if (!isset($_POST['video_num'])) {
         throw new Exception("Keine Video-Nummer übergeben.");
+    }
+
+    if (!isset($_POST['password']) || $_POST['password'] !== UPLOAD_PASSWORD) {
+        throw new Exception("Falsches Passwort. Upload nicht erlaubt.");
     }
 
     $videoNum = $_POST['video_num'];
@@ -22,13 +26,14 @@ try {
         if (isset($row[0]) && $row[0] == $videoNum) {
             $metadata = [
                 'title' => $row[2] ?? 'Bitcoin Short #' . $videoNum,
-                'desc'  => $row[5] ?? ''
+                'desc' => $row[5] ?? ''
             ];
             break;
         }
     }
 
-    if (!$metadata) throw new Exception("Video-Nummer $videoNum nicht im Sheet gefunden.");
+    if (!$metadata)
+        throw new Exception("Video-Nummer $videoNum nicht im Sheet gefunden.");
 
     // 2. Datum berechnen
     $publishDate = new DateTime('2026-01-01 21:21:00');
@@ -40,7 +45,8 @@ try {
     $fileName = $videoNum . '.mp4';
     $files = $drive->files->listFiles(['q' => "'" . FOLDER_ID . "' in parents and name = '$fileName' and trashed = false"]);
 
-    if (count($files->getFiles()) == 0) throw new Exception("Datei $fileName nicht gefunden.");
+    if (count($files->getFiles()) == 0)
+        throw new Exception("Datei $fileName nicht gefunden.");
 
     $fileId = $files->getFiles()[0]->getId();
     $content = $drive->files->get($fileId, ['alt' => 'media']);
@@ -50,7 +56,7 @@ try {
     // 4. YouTube Upload
     $youtube = new Google\Service\YouTube($client);
     $video = new Google\Service\YouTube\Video();
-    
+
     $snippet = new Google\Service\YouTube\VideoSnippet();
     $snippet->setTitle($metadata['title']);
     $snippet->setDescription($metadata['desc']);
@@ -70,10 +76,10 @@ try {
     $videoId = $result->getId();
 
     // --- ÄNDERUNG HIER: Nur die Video-ID zurück ins Sheet schreiben ---
-    $values = [[ $videoId ]]; // Hier wurde das Präfix "https://youtu.be/" entfernt
+    $values = [[$videoId]]; // Hier wurde das Präfix "https://youtu.be/" entfernt
     $body = new Google\Service\Sheets\ValueRange(['values' => $values]);
     $params = ['valueInputOption' => 'RAW'];
-    $rowInSheet = $videoNum + 1; 
+    $rowInSheet = $videoNum + 1;
     $service->spreadsheets_values->update(SHEET_ID, SHEET_NAME . "!G$rowInSheet", $body, $params);
 
     // 5. Optionaler SRT Upload
@@ -83,19 +89,20 @@ try {
     if (count($srtFiles->getFiles()) > 0) {
         $srtId = $srtFiles->getFiles()[0]->getId();
         $srtData = $drive->files->get($srtId, ['alt' => 'media'])->getBody()->getContents();
-        
+
         $capSnippet = new Google\Service\YouTube\CaptionSnippet();
         $capSnippet->setVideoId($videoId);
         $capSnippet->setLanguage('de');
         $capSnippet->setName('Original');
-        
+
         $caption = new Google\Service\YouTube\Caption();
         $caption->setSnippet($capSnippet);
         $youtube->captions->insert('snippet', $caption, ['data' => $srtData, 'mimeType' => '*/*', 'uploadType' => 'multipart']);
         $srtUploaded = true;
     }
 
-    if (file_exists($tempFile)) unlink($tempFile);
+    if (file_exists($tempFile))
+        unlink($tempFile);
 
     echo json_encode([
         'success' => true,

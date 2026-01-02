@@ -186,6 +186,9 @@
         }
 
         async function runUpload(nr) {
+            const password = prompt("Bitte Passwort für Upload eingeben:");
+            if (!password) return;
+
             const overlay = document.getElementById('loading-overlay');
             overlay.style.display = 'flex';
             document.getElementById('status-text').innerText = `Video #${nr} wird an YouTube übertragen...`;
@@ -193,6 +196,7 @@
             try {
                 const fd = new FormData();
                 fd.append('video_num', nr);
+                fd.append('password', password);
 
                 const res = await fetch('upload.php', { method: 'POST', body: fd });
                 const data = await res.json();
