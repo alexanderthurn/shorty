@@ -1,0 +1,14 @@
+# Composer-Abhängigkeiten (sehr wichtig!)
+/vendor/
+/.vscode/
+
+# Sensible Daten (dein permanenter Zugang zu Google)
+token.json
+client_secret.json
+
+
+# Temporäre Dateien (die Video-Datei während des Uploads)
+temp.mp4
+
+# Falls du Umgebungsvariablen nutzt
+.env
