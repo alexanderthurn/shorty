@@ -1,98 +1,217 @@
 <!DOCTYPE html>
 <html lang="de">
+
 <head>
     <meta charset="UTF-8">
-    <title>Shorty Dashboard v3</title>
+    <title>Shorty Dashboard v3.1</title>
     <style>
-        body { font-family: sans-serif; background: #f0f2f5; margin: 0; padding: 20px; }
-        .container { max-width: 1000px; margin: 0 auto; }
-        table { width: 100%; border-collapse: collapse; background: white; box-shadow: 0 2px 5px rgba(0,0,0,0.1); border-radius: 8px; overflow: hidden; }
-        th, td { padding: 12px; border-bottom: 1px solid #ddd; text-align: left; }
-        th { background: #333; color: white; }
-        .row-done { background-color: #e8f5e9; opacity: 0.8; }
-        .row-next { background-color: #fff9c4 !important; outline: 2px solid #fbc02d; }
-        .badge { padding: 3px 6px; border-radius: 3px; font-size: 0.8em; font-weight: bold; }
-        .bg-ok { background: #c8e6c9; color: #2e7d32; }
-        .bg-err { background: #ffcdd2; color: #c62828; }
-        .btn { cursor: pointer; padding: 8px 15px; border: none; border-radius: 4px; background: #1a73e8; color: white; }
-        .btn:disabled { background: #ccc; cursor: not-allowed; }
-        #overlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); color:white; justify-content:center; align-items:center; z-index:1000; flex-direction:column; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #f4f7f9;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: #2c3e50;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+        }
+
+        th,
+        td {
+            padding: 14px;
+            border-bottom: 1px solid #edf2f7;
+            text-align: left;
+        }
+
+        th {
+            background: #2d3748;
+            color: white;
+            font-weight: 600;
+        }
+
+        .row-done {
+            background-color: #f0fff4;
+            opacity: 0.8;
+        }
+
+        .row-next {
+            background-color: #fffaf0 !important;
+            border: 2px solid #ed8936;
+        }
+
+        .badge {
+            padding: 4px 8px;
+            border-radius: 5px;
+            font-size: 0.75em;
+            font-weight: bold;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .bg-ok {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .bg-err {
+            background: #fed7d7;
+            color: #822727;
+        }
+
+        .btn {
+            cursor: pointer;
+            padding: 10px 18px;
+            border: none;
+            border-radius: 6px;
+            background: #3182ce;
+            color: white;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+
+        .btn:hover {
+            background: #2b6cb0;
+        }
+
+        .btn:disabled {
+            background: #cbd5e0;
+            cursor: not-allowed;
+        }
+
+        .yt-link {
+            color: #e53e3e;
+            font-weight: bold;
+            text-decoration: none;
+        }
+
+        .sheet-link {
+            color: #2b6cb0;
+            text-decoration: none;
+        }
+
+        .sheet-link:hover {
+            text-decoration: underline;
+        }
+
+        #loading-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            flex-direction: column;
+        }
     </style>
 </head>
+
 <body>
 
-<div id="overlay"><h2 id="status-msg">Upload läuft...</h2></div>
+    <div id="loading-overlay">
+        <h2 id="status-text">Upload läuft...</h2>
+        <p>Bitte das Tab nicht schließen.</p>
+    </div>
 
-<div class="container">
-    <h1>🎬 Bitcoin Jahr 2026 - Manager</h1>
-    <div id="table-view">Lade Daten von Google...</div>
-</div>
+    <div class="container">
+        <h1>🚀 Bitcoin Jahr 2026 Manager</h1>
+        <div id="content">Daten werden geladen...</div>
+    </div>
 
-<script>
-async function loadList() {
-    const view = document.getElementById('table-view');
-    try {
-        const response = await fetch('list.php');
-        const json = await response.json();
-        
-        let html = `<table><thead><tr><th>Nr</th><th>Titel</th><th>Datum</th><th>Files</th><th>Status</th><th>Aktion</th></tr></thead><tbody>`;
-        
-        let scrolled = false;
+    <script>
+        async function loadData() {
+            const content = document.getElementById('content');
+            try {
+                const response = await fetch('list.php');
+                const json = await response.json();
 
-        json.data.forEach(item => {
-            const isDone = item.isUploaded;
-            const isNext = !isDone && item.hasMp4 && !scrolled;
-            if (isNext) scrolled = true;
+                let html = `<table><thead><tr><th>Nr</th><th>Titel (Sheet)</th><th>Plan-Datum</th><th>Drive-Files</th><th>YouTube</th><th>Aktion</th></tr></thead><tbody>`;
 
-            html += `<tr class="${isDone ? 'row-done' : (isNext ? 'row-next' : '')}" ${isNext ? 'id="next-video"' : ''}>
+                let scrolled = false;
+
+                json.data.forEach(item => {
+                    const isDone = item.isUploaded;
+                    const isNext = !isDone && item.hasMp4 && !scrolled;
+                    if (isNext) scrolled = true;
+
+                    const mp4Badge = item.hasMp4
+                        ? `<a href="${item.mp4Link}" target="_blank" class="badge bg-ok">MP4 ✔</a>`
+                        : `<span class="badge bg-err">MP4 ✘</span>`;
+
+                    const srtBadge = item.hasSrt
+                        ? `<a href="${item.srtLink}" target="_blank" class="badge bg-ok">SRT ✔</a>`
+                        : `<span class="badge bg-err">SRT ✘</span>`;
+
+                    html += `<tr class="${isDone ? 'row-done' : (isNext ? 'row-next' : '')}" ${isNext ? 'id="next-video"' : ''}>
                 <td><strong>#${item.nr}</strong></td>
-                <td>${item.titel}</td>
+                <td><a href="${item.sheetLink}" target="_blank" class="sheet-link">${item.titel}</a></td>
                 <td>${item.datum}</td>
+                <td>${mp4Badge} ${srtBadge}</td>
                 <td>
-                    <span class="badge ${item.hasMp4 ? 'bg-ok' : 'bg-err'}">MP4</span>
-                    <span class="badge ${item.hasSrt ? 'bg-ok' : 'bg-err'}">SRT</span>
+                    ${isDone ? `<a href="https://youtu.be/${item.youtubeId}" target="_blank" class="yt-link">🎬 Video</a>` : '⏳ Ausstehend'}
                 </td>
-                <td>${isDone ? '✅ Hochgeladen' : '⏳ Offen'}</td>
                 <td>
-                    <button class="btn" onclick="upload(${item.nr})" ${isDone || !item.hasMp4 ? 'disabled' : ''}>
-                        ${isDone ? 'Erledigt' : 'Upload'}
+                    <button class="btn" onclick="runUpload(${item.nr})" ${isDone || !item.hasMp4 ? 'disabled' : ''}>
+                        ${isDone ? 'Erledigt' : '🚀 Upload'}
                     </button>
                 </td>
             </tr>`;
-        });
+                });
 
-        view.innerHTML = html + '</tbody></table>';
+                content.innerHTML = html + '</tbody></table>';
 
-        if (scrolled) {
-            document.getElementById('next-video').scrollIntoView({ behavior: 'smooth', block: 'center' });
+                if (scrolled) {
+                    document.getElementById('next-video').scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+
+            } catch (e) { content.innerHTML = "Fehler beim Laden: " + e.message; }
         }
 
-    } catch (e) { view.innerHTML = "Fehler: " + e.message; }
-}
+        async function runUpload(nr) {
+            const overlay = document.getElementById('loading-overlay');
+            overlay.style.display = 'flex';
+            document.getElementById('status-text').innerText = `Video #${nr} wird an YouTube übertragen...`;
 
-async function upload(nr) {
-    const overlay = document.getElementById('overlay');
-    overlay.style.display = 'flex';
-    document.getElementById('status-msg').innerText = `Lade Video #${nr} hoch...`;
+            try {
+                const fd = new FormData();
+                fd.append('video_num', nr);
 
-    try {
-        const fd = new FormData();
-        fd.append('video_num', nr);
+                const res = await fetch('upload.php', { method: 'POST', body: fd });
+                const data = await res.json();
 
-        const res = await fetch('upload.php', { method: 'POST', body: fd });
-        const data = await res.json();
-
-        if (data.success) {
-            alert(`Erfolg! Video #${nr} wurde geplant.`);
-            loadList();
-        } else {
-            alert("Fehler: " + data.message);
+                if (data.success) {
+                    alert(`Erfolg! Video #${nr} wurde hochgeladen und geplant.`);
+                    loadData();
+                } else {
+                    alert("Fehler beim Upload: " + data.message);
+                }
+            } catch (e) {
+                alert("Netzwerkfehler oder Server-Timeout.");
+            } finally {
+                overlay.style.display = 'none';
+            }
         }
-    } catch (e) { alert("Systemfehler"); }
-    overlay.style.display = 'none';
-}
 
-loadList();
-</script>
+        loadData();
+    </script>
 </body>
+
 </html>
