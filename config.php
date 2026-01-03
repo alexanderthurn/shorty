@@ -7,6 +7,7 @@ define('FOLDER_ID', '13HVjxYsIzRape4HmeivmdeaqMenNyPFO');
 define('SHEET_NAME', 'Themen');
 define('PLAYLIST_ID', 'PLizsgj8iO0fNQfYI7oGVGXG6XN1d4jBXP');
 // ---------------------------
+define('NIGHTLY_MODE', 'MOCK'); // OFF, ON, MOCK
 
 function getClient()
 {

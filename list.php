@@ -1,8 +1,11 @@
 <?php
-header('Content-Type: application/json; charset=utf-8');
 require_once 'config.php';
 
-try {
+/**
+ * Holt die Liste aller Einträge aus dem Google Sheet und kombiniert sie mit Drive-Daten.
+ */
+function getShortyList()
+{
     $client = getClient();
     $sheets = new Google\Service\Sheets($client);
     $drive = new Google\Service\Drive($client);
@@ -48,7 +51,9 @@ try {
             'nr' => $nr,
             'titel' => "Tag $nr - " . ($row[2] ?? 'Kein Titel'), // Spalte C
             'datum' => $pDate->format('d.m.Y H:i'),
+            'datum_raw' => $pDate, // Hilfreich für Vergleiche in nightly.php
             'hasMp4' => isset($filesFound[$nr]['mp4']),
+            'mp4Id' => $filesFound[$nr]['mp4']['id'] ?? null,
             'hasSrt' => isset($filesFound[$nr]['srt']),
             'isUploaded' => !empty($row[7]),
             'youtubeId' => $row[7] ?? null,
@@ -60,13 +65,27 @@ try {
         ];
     }
 
-    // Sortierung: Neueste oben
+    // Sortierung: Neueste oben (Standard für die Liste)
     usort($results, function ($a, $b) {
         return $b['nr'] <=> $a['nr'];
     });
 
-    echo json_encode(['success' => true, 'data' => $results]);
+    return $results;
+}
 
-} catch (Exception $e) {
-    echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+if (!defined('IN_NIGHTLY')) {
+    if (php_sapi_name() !== 'cli') {
+        header('Content-Type: application/json; charset=utf-8');
+    }
+    try {
+        $results = getShortyList();
+        // Remove 'datum_raw' for JSON output to keep the response clean
+        foreach ($results as &$item) {
+            unset($item['datum_raw']);
+        }
+        unset($item); // Break the reference of the last element
+        echo json_encode(['success' => true, 'data' => $results]);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
 }

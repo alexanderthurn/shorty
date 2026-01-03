@@ -4,82 +4,82 @@ ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 ini_set('memory_limit', '1024M');
 
-header('Content-Type: application/json; charset=utf-8');
+if (php_sapi_name() !== 'cli') {
+    header('Content-Type: application/json; charset=utf-8');
+}
 set_time_limit(600);
 
 require_once 'config.php';
 
 // --- OAUTH 1.0a SIGNING HELPER ---
-function get_oauth_header($url, $method, $params, $consumer_key, $consumer_secret, $access_token, $access_secret)
-{
-    $oauth = [
-        'oauth_consumer_key' => $consumer_key,
-        'oauth_nonce' => md5(uniqid(rand(), true)),
-        'oauth_signature_method' => 'HMAC-SHA1',
-        'oauth_timestamp' => time(),
-        'oauth_token' => $access_token,
-        'oauth_version' => '1.0'
-    ];
+if (!function_exists('get_oauth_header')) {
+    function get_oauth_header($url, $method, $params, $consumer_key, $consumer_secret, $access_token, $access_secret)
+    {
+        $oauth = [
+            'oauth_consumer_key' => $consumer_key,
+            'oauth_nonce' => md5(uniqid(rand(), true)),
+            'oauth_signature_method' => 'HMAC-SHA1',
+            'oauth_timestamp' => time(),
+            'oauth_token' => $access_token,
+            'oauth_version' => '1.0'
+        ];
 
-    $sign_params = array_merge($oauth, array_filter($params, function ($v) {
-        return !is_array($v) && strpos((string) $v, '@') !== 0;
-    }));
-    uksort($sign_params, 'strcmp');
+        $sign_params = array_merge($oauth, array_filter($params, function ($v) {
+            return !is_array($v) && strpos((string) $v, '@') !== 0;
+        }));
+        uksort($sign_params, 'strcmp');
 
-    $base_string = strtoupper($method) . "&" . rawurlencode($url) . "&" . rawurlencode(http_build_query($sign_params, '', '&', PHP_QUERY_RFC3986));
-    $signing_key = rawurlencode($consumer_secret) . "&" . rawurlencode($access_secret);
-    $oauth['oauth_signature'] = base64_encode(hash_hmac('sha1', $base_string, $signing_key, true));
+        $base_string = strtoupper($method) . "&" . rawurlencode($url) . "&" . rawurlencode(http_build_query($sign_params, '', '&', PHP_QUERY_RFC3986));
+        $signing_key = rawurlencode($consumer_secret) . "&" . rawurlencode($access_secret);
+        $oauth['oauth_signature'] = base64_encode(hash_hmac('sha1', $base_string, $signing_key, true));
 
-    uksort($oauth, 'strcmp');
-    $header = 'Authorization: OAuth ';
-    $values = [];
-    foreach ($oauth as $k => $v)
-        $values[] = rawurlencode($k) . '="' . rawurlencode($v) . '"';
-    $header .= implode(', ', $values);
-    return $header;
-}
-
-function curl_request($url, $method, $params, $headers = [], $is_json = false)
-{
-    $ch = curl_init();
-    if ($method == 'POST') {
-        curl_setopt($ch, CURLOPT_POST, 1);
-        if ($is_json) {
-            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($params));
-            $headers[] = 'Content-Type: application/json';
-        } else {
-            curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($params));
-        }
-    } elseif ($method == 'GET') {
-        if (!empty($params))
-            $url .= '?' . http_build_query($params);
+        uksort($oauth, 'strcmp');
+        $header = 'Authorization: OAuth ';
+        $values = [];
+        foreach ($oauth as $k => $v)
+            $values[] = rawurlencode($k) . '="' . rawurlencode($v) . '"';
+        $header .= implode(', ', $values);
+        return $header;
     }
-
-    curl_setopt($ch, CURLOPT_URL, $url);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 60);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-
-    $response = curl_exec($ch);
-    $info = curl_getinfo($ch);
-    curl_close($ch);
-
-    return ['body' => json_decode($response), 'code' => $info['http_code'], 'raw' => $response];
 }
 
-try {
+if (!function_exists('curl_request')) {
+    function curl_request($url, $method, $params, $headers = [], $is_json = false)
+    {
+        $ch = curl_init();
+        if ($method == 'POST') {
+            curl_setopt($ch, CURLOPT_POST, 1);
+            if ($is_json) {
+                curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($params));
+                $headers[] = 'Content-Type: application/json';
+            } else {
+                curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($params));
+            }
+        } elseif ($method == 'GET') {
+            if (!empty($params))
+                $url .= '?' . http_build_query($params);
+        }
+
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 60);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+
+        $response = curl_exec($ch);
+        $info = curl_getinfo($ch);
+        curl_close($ch);
+
+        return ['body' => json_decode($response), 'code' => $info['http_code'], 'raw' => $response];
+    }
+}
+
+/**
+ * Kern-Logik für den Post auf X.
+ */
+function postToX($videoNum, $isMock = false)
+{
     $client = getClient();
-    if (!isset($_POST['video_num']))
-        throw new Exception("Video-Nummer fehlt.");
-    // Passwort-Prüfung gegen Hash in client_secret.json
-    $secrets = json_decode(file_get_contents(__DIR__ . '/client_secret.json'), true);
-    $expectedHash = $secrets['security']['upload_password_sha256'] ?? '';
-
-    if (!isset($_POST['password']) || $_POST['password'] !== $expectedHash)
-        throw new Exception("Passwort falsch.");
-
-    $videoNum = $_POST['video_num'];
     $service = new Google\Service\Sheets($client);
     $response = $service->spreadsheets_values->get(SHEET_ID, SHEET_NAME . '!A2:J420');
     $rows = $response->getValues();
@@ -108,10 +108,15 @@ try {
             break;
         }
     }
+
     if (!$metadata)
         throw new Exception("Video #$videoNum nicht gefunden.");
     if ($tweetId)
         throw new Exception("Dieses Video wurde bereits auf X gepostet (ID: $tweetId)");
+
+    if ($isMock) {
+        return ['success' => true, 'message' => "[MOCK] Video #$videoNum würde jetzt gepostet werden.", 'mock' => true];
+    }
 
     $secrets = json_decode(file_get_contents(__DIR__ . '/client_secret.json'), true)['x'];
     $ck = $secrets['consumer_key'];
@@ -122,6 +127,8 @@ try {
 
     // --- LOGIK: REFRESH ODER NEU-UPLOAD ---
     $needsUpload = true;
+    $statusResult = null;
+
     if ($mediaId) {
         // Status der existierenden Media-ID prüfen
         $params = ['command' => 'STATUS', 'media_id' => $mediaId];
@@ -154,8 +161,11 @@ try {
         $params = ['command' => 'INIT', 'media_type' => 'video/mp4', 'media_category' => 'tweet_video', 'total_bytes' => filesize($tempFile)];
         $auth = get_oauth_header($upload_url, 'POST', $params, $ck, $cs, $at, $as);
         $res = curl_request($upload_url, 'POST', $params, [$auth]);
-        if (!isset($res['body']->media_id_string))
+        if (!isset($res['body']->media_id_string)) {
+            if (file_exists($tempFile))
+                unlink($tempFile);
             throw new Exception("X INIT Fehler: " . $res['raw']);
+        }
         $mediaId = $res['body']->media_id_string;
 
         // 3. Media-ID SOFORT im Sheet speichern (Spalte J)
@@ -171,8 +181,12 @@ try {
             $params = ['command' => 'APPEND', 'media_id' => $mediaId, 'segment_index' => $segment, 'media' => base64_encode($chunk)];
             $auth = get_oauth_header($upload_url, 'POST', $params, $ck, $cs, $at, $as);
             $res = curl_request($upload_url, 'POST', $params, [$auth]);
-            if ($res['code'] != 204)
+            if ($res['code'] != 204) {
+                fclose($handle);
+                if (file_exists($tempFile))
+                    unlink($tempFile);
                 throw new Exception("X APPEND Fehler at $segment");
+            }
             $segment++;
         }
         fclose($handle);
@@ -190,9 +204,11 @@ try {
     $attempts = 0;
     while (($state === 'pending' || $state === 'in_progress') && $attempts < 10) {
         $sleep = $statusResult->processing_info->check_after_secs ?? 5;
-        if ($sleep > 10)
-            break; // Nicht zu lange blockieren (Cloudflare!)
-        sleep($sleep);
+        if ($sleep > 15)
+            sleep(15);
+        else
+            sleep($sleep);
+
         $params = ['command' => 'STATUS', 'media_id' => $mediaId];
         $auth = get_oauth_header($upload_url, 'GET', $params, $ck, $cs, $at, $as);
         $res = curl_request($upload_url, 'GET', $params, [$auth]);
@@ -217,11 +233,30 @@ try {
             ['valueInputOption' => 'RAW']
         );
 
-        echo json_encode(['success' => true, 'message' => "Erfolgreich gepostet!"]);
+        return ['success' => true, 'message' => "Erfolgreich gepostet!", 'tweetId' => $tweetId];
     } else {
-        echo json_encode(['success' => true, 'message' => "Upload fertig. Video wird noch von X verarbeitet. Bitte in 1 Minute noch mal klicken!"]);
+        return ['success' => true, 'message' => "Upload fertig. Video wird noch verarbeitet.", 'processing' => true];
     }
-
-} catch (Throwable $e) {
-    echo json_encode(['success' => false, 'message' => $e->getMessage()]);
 }
+
+// Direkter Aufruf via HTTP oder CLI (z.B. vom Browser/Frontend oder Cron)
+if (!defined('IN_NIGHTLY')) {
+    try {
+        if (!isset($_POST['video_num']))
+            throw new Exception("Video-Nummer fehlt.");
+
+        // Passwort-Prüfung gegen Hash in client_secret.json
+        $secrets = json_decode(file_get_contents(__DIR__ . '/client_secret.json'), true);
+        $expectedHash = $secrets['security']['upload_password_sha256'] ?? '';
+
+        if (!isset($_POST['password']) || $_POST['password'] !== $expectedHash)
+            throw new Exception("Passwort falsch.");
+
+        $result = postToX($_POST['video_num']);
+        echo json_encode($result);
+
+    } catch (Throwable $e) {
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    }
+}
+?>
