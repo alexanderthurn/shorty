@@ -1,27 +1,15 @@
 <?php
-header('Content-Type: application/json; charset=utf-8');
-set_time_limit(600);
-
 require_once 'config.php';
 
-try {
+/**
+ * Kern-Logik für den Video-Upload zu YouTube.
+ */
+function uploadToYouTube($videoNum, $isMock = false)
+{
     $client = getClient();
-    if (!isset($_POST['video_num'])) {
-        throw new Exception("Keine Video-Nummer übergeben.");
-    }
-
-    // Passwort-Prüfung gegen Hash in client_secret.json
-    $secrets = json_decode(file_get_contents(__DIR__ . '/client_secret.json'), true);
-    $expectedHash = $secrets['security']['upload_password_sha256'] ?? '';
-
-    if (!isset($_POST['password']) || $_POST['password'] !== $expectedHash) {
-        throw new Exception("Falsches Passwort. Upload nicht erlaubt.");
-    }
-
-    $videoNum = $_POST['video_num'];
+    $service = new Google\Service\Sheets($client);
 
     // 1. Daten aus Google Sheet holen
-    $service = new Google\Service\Sheets($client);
     $response = $service->spreadsheets_values->get(SHEET_ID, SHEET_NAME . '!A2:H420');
     $rows = $response->getValues();
     $metadata = null;
@@ -38,14 +26,28 @@ try {
             $metadata = [
                 'title' => "Tag $videoNum - " . ($row[2] ?? 'Bitcoin Short #' . $videoNum),
                 'desc' => $row[3] ?? '', // Spalte D = Index 3
-                'tags' => $tags
+                'tags' => $tags,
+                'isUploaded' => !empty($row[7]) // Spalte H = Index 7
             ];
             break;
         }
     }
 
-    if (!$metadata)
+    if (!$metadata) {
         throw new Exception("Video-Nummer $videoNum nicht im Sheet gefunden.");
+    }
+
+    if ($metadata['isUploaded']) {
+        throw new Exception("Video #$videoNum wurde bereits auf YouTube hochgeladen.");
+    }
+
+    if ($isMock) {
+        return [
+            'success' => true,
+            'message' => "[MOCK] Video #$videoNum würde jetzt zu YouTube hochgeladen werden.",
+            'mock' => true
+        ];
+    }
 
     // 2. Datum berechnen
     $publishDate = new DateTime('2026-01-01 21:21:00');
@@ -60,8 +62,9 @@ try {
         'fields' => 'files(id, name)'
     ]);
 
-    if (count($files->getFiles()) == 0)
+    if (count($files->getFiles()) == 0) {
         throw new Exception("Datei $fileName nicht gefunden.");
+    }
 
     $driveFile = $files->getFiles()[0];
     $fileId = $driveFile->getId();
@@ -114,7 +117,7 @@ try {
     $playlistItem->setSnippet($playlistSnippet);
     $youtube->playlistItems->insert('snippet', $playlistItem);
 
-    // --- ÄNDERUNG HIER: Nur die Video-ID zurück ins Sheet schreiben (Jetzt Spalte H) ---
+    // --- Video-ID zurück ins Sheet schreiben (Spalte H) ---
     $values = [[$videoId]];
     $body = new Google\Service\Sheets\ValueRange(['values' => $values]);
     $params = ['valueInputOption' => 'RAW'];
@@ -140,17 +143,43 @@ try {
         $srtUploaded = true;
     }
 
-    if (file_exists($tempFile))
+    if (file_exists($tempFile)) {
         unlink($tempFile);
+    }
 
-    echo json_encode([
+    return [
         'success' => true,
         'message' => "Video #$videoNum erfolgreich hochgeladen",
         'videoId' => $videoId,
         'plannedFor' => $publishDate->format('d.m.Y H:i'),
         'srt' => $srtUploaded
-    ]);
+    ];
+}
 
-} catch (Exception $e) {
-    echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+// Direkter Aufruf via HTTP (z.B. vom Browser/Frontend)
+if (!defined('IN_NIGHTLY')) {
+    if (php_sapi_name() !== 'cli') {
+        header('Content-Type: application/json; charset=utf-8');
+    }
+    set_time_limit(600);
+
+    try {
+        if (!isset($_POST['video_num'])) {
+            throw new Exception("Keine Video-Nummer übergeben.");
+        }
+
+        // Passwort-Prüfung gegen Hash in client_secret.json
+        $secrets = json_decode(file_get_contents(__DIR__ . '/client_secret.json'), true);
+        $expectedHash = $secrets['security']['upload_password_sha256'] ?? '';
+
+        if (!isset($_POST['password']) || $_POST['password'] !== $expectedHash) {
+            throw new Exception("Falsches Passwort. Upload nicht erlaubt.");
+        }
+
+        $result = uploadToYouTube($_POST['video_num']);
+        echo json_encode($result);
+
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    }
 }
