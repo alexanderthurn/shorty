@@ -245,9 +245,10 @@ if (!defined('IN_NIGHTLY')) {
         if (!isset($_POST['video_num']))
             throw new Exception("Video-Nummer fehlt.");
 
-        // Passwort-Prüfung gegen Hash in client_secret.json
+        // Passwort-Prüfung gegen Hash in client_secret.json (unterstützt alt/neu)
         $secrets = json_decode(file_get_contents(__DIR__ . '/client_secret.json'), true);
-        $expectedHash = $secrets['security']['upload_password_sha256'] ?? '';
+        $c = $secrets['app'] ?? $secrets['app_config'] ?? [];
+        $expectedHash = $c['password'] ?? '';
 
         if (!isset($_POST['password']) || $_POST['password'] !== $expectedHash)
             throw new Exception("Passwort falsch.");

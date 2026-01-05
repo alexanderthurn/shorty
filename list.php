@@ -1,5 +1,8 @@
 <?php
 require_once 'config.php';
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
 
 /**
  * Holt die Liste aller Einträge aus dem Google Sheet und kombiniert sie mit Drive-Daten.
@@ -84,7 +87,11 @@ if (!defined('IN_NIGHTLY')) {
             unset($item['datum_raw']);
         }
         unset($item); // Break the reference of the last element
-        echo json_encode(['success' => true, 'data' => $results]);
+        echo json_encode([
+            'success' => true,
+            'sheet_name' => SHEET_NAME,
+            'data' => $results
+        ]);
     } catch (Exception $e) {
         echo json_encode(['success' => false, 'error' => $e->getMessage()]);
     }

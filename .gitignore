@@ -12,3 +12,7 @@ temp.mp4
 
 # Falls du Umgebungsvariablen nutzt
 .env
+
+# System-Dateien
+.DS_Store
+*.log

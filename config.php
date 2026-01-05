@@ -2,21 +2,54 @@
 require_once 'vendor/autoload.php';
 
 // --- DEINE KONFIGURATION ---
-define('SHEET_ID', '15mWMEw0JrlCdnIABrUcvTfTCuLRE1coDFCg78xywIFA');
-define('FOLDER_ID', '13HVjxYsIzRape4HmeivmdeaqMenNyPFO');
-define('SHEET_NAME', 'Themen');
-define('PLAYLIST_ID', 'PLizsgj8iO0fNQfYI7oGVGXG6XN1d4jBXP');
+// Wird jetzt aus client_secret.json ("app" Sektion) geladen.
 // ---------------------------
-define('NIGHTLY_MODE', 'ON'); // OFF, ON, MOCK
-define('NIGHTLY_X_ACTIVE', true);
-define('NIGHTLY_YOUTUBE_ACTIVE', false);
+
+// Initialer Aufruf, um Konstanten zu definieren.
+// Wir definieren hier Defaults, falls client_secret.json fehlt oder unvollständig ist.
+(function () {
+    $secretPath = __DIR__ . '/client_secret.json';
+    $authData = [];
+    if (file_exists($secretPath)) {
+        $authData = json_decode(file_get_contents($secretPath), true) ?: [];
+    }
+
+    // Unterstütze sowohl 'app' (neu) als auch 'app_config' (alt) für den Übergang
+    $c = $authData['app'] ?? $authData['app_config'] ?? [];
+
+    if (!defined('SHEET_ID'))
+        define('SHEET_ID', $c['sheet_id'] ?? '');
+    if (!defined('FOLDER_ID'))
+        define('FOLDER_ID', $c['folder_id'] ?? '');
+    if (!defined('SHEET_NAME'))
+        define('SHEET_NAME', $c['sheet_name'] ?? 'Themen');
+    if (!defined('PLAYLIST_ID'))
+        define('PLAYLIST_ID', $c['playlist_id'] ?? '');
+
+    if (!defined('NIGHTLY_MODE'))
+        define('NIGHTLY_MODE', $c['nightly_mode'] ?? 'OFF');
+    if (!defined('NIGHTLY_X_ACTIVE'))
+        define('NIGHTLY_X_ACTIVE', $c['nightly_x_active'] ?? false);
+    if (!defined('NIGHTLY_YOUTUBE_ACTIVE'))
+        define('NIGHTLY_YOUTUBE_ACTIVE', $c['nightly_youtube_active'] ?? false);
+})();
 
 function getClient()
 {
     $client = new Google\Client();
 
-    // client_secret.json laden und "google"-Sektion (ehemals "web") extrahieren
-    $authData = json_decode(file_get_contents(__DIR__ . '/client_secret.json'), true);
+    // client_secret.json laden
+    $secretPath = __DIR__ . '/client_secret.json';
+    if (!file_exists($secretPath)) {
+        throw new Exception("client_secret.json nicht gefunden: " . $secretPath);
+    }
+
+    $authData = json_decode(file_get_contents($secretPath), true);
+    if (!$authData) {
+        throw new Exception("Fehler beim Parsen von client_secret.json");
+    }
+
+    // 2. Google Client Auth
     if (!isset($authData['google'])) {
         throw new Exception("'google' Sektion fehlt in client_secret.json");
     }
