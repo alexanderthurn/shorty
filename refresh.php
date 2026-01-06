@@ -44,24 +44,8 @@ function refreshMetadata($videoNum, $config, $isPreview = false)
     if (!$metadata)
         throw new Exception("Video-Nummer $videoNum nicht im Sheet gefunden.");
 
-    // Config global footer
-    $footerText = $config['footer_text'] ?? '';
-    if (!empty($footerText)) {
-        $metadata['desc'] .= "\n\n----------------------------------\n" . $footerText . "\n----------------------------------";
-    }
-
-    if ($isPreview) {
-        return [
-            'success' => true,
-            'preview' => true,
-            'title' => $metadata['title'],
-            'desc' => $metadata['desc'],
-            'tags' => $metadata['tags'],
-            'driveLink' => $videoId ? "https://youtu.be/$videoId" : null, // Show YT link if available
-            'videoNum' => $videoNum,
-            'isRefresh' => true // Hint for UI to show it's existing video
-        ];
-    }
+    if (!$videoId)
+        throw new Exception("Video-ID für #$videoNum nicht im Sheet gefunden.");
 
     if (!$videoId)
         throw new Exception("Video-ID für #$videoNum nicht im Sheet gefunden.");
@@ -81,10 +65,53 @@ function refreshMetadata($videoNum, $config, $isPreview = false)
     }
     $video = $listResponse->getItems()[0];
 
+    // --- Logic to preserve manual sections ---
+    $currentDesc = $video->getSnippet()->getDescription();
+
+    // Support both old (34 dashes) and new (21 dashes) separators for reading
+    $separatorOld = "----------------------------------";
+    $separatorNew = "---------------------"; // 21 dashes
+
+    $useSeparatorForSplit = $separatorNew;
+    if (strpos($currentDesc, $separatorOld) !== false) {
+        $useSeparatorForSplit = $separatorOld;
+    }
+
+    $parts = explode($useSeparatorForSplit, $currentDesc);
+    $parts = array_map('trim', $parts); // Cleanup whitespace
+
+    $preservedMiddle = "";
+
+    // Case: At least 3 parts (Top, Middle(s), Bottom)
+    // Example: [Desc, Manual, Footer]
+    if (count($parts) >= 3) {
+        // We preserve everything between the first and the last element
+        $middleParts = array_slice($parts, 1, -1);
+        $preservedMiddle = implode("\n\n" . $separatorNew . "\n", $middleParts);
+    }
+    // Note: If count is 2 (Desc, Footer), middle is empty.
+    // If count is 1 (Desc only), middle is empty and we overwrite desc.
+
+    // Construct new Description
+    $finalDesc = $metadata['desc'];
+
+    // Add Middle if exists
+    if (!empty($preservedMiddle)) {
+        $finalDesc .= "\n\n" . $separatorNew . "\n" . $preservedMiddle;
+    }
+
+    // Add Footer
+    // Config global footer
+    $footerText = $config['footer_text'] ?? '';
+    if (!empty($footerText)) {
+        $finalDesc .= "\n\n" . $separatorNew . "\n" . $footerText;
+    }
+    // ----------------------------------------
+
     // Snippet aktualisieren
     $snippet = $video->getSnippet();
     $snippet->setTitle($metadata['title']);
-    $snippet->setDescription($metadata['desc']);
+    $snippet->setDescription($finalDesc);
     $snippet->setTags($metadata['tags']);
     $snippet->setDefaultLanguage('de');
     $snippet->setDefaultAudioLanguage('de');
@@ -100,8 +127,7 @@ function refreshMetadata($videoNum, $config, $isPreview = false)
     if ($publishDate > $now) {
         $status->setPublishAt($publishStr);
     } else {
-        // Wenn Datum in Vergangenheit: PublishAt nicht setzen (löschen/nullen geht via API oft nicht direkt so einfach,
-        // aber wir senden es einfach nicht erneut, wenn es schon public ist).
+        // Wenn Datum in Vergangenheit: PublishAt nicht setzen
         // Falls das Video 'private' ist und eigentlich veröffentlich sein SOLLTE, müssten wir status->privacyStatus = 'public' setzen.
         // Das Skript ging bisher davon aus, dass wir schedulen.
         // Wir lassen PublishAt hier weg, um den Fehler zu vermeiden.
@@ -114,6 +140,26 @@ function refreshMetadata($videoNum, $config, $isPreview = false)
     $recordingDetails = new Google\Service\YouTube\VideoRecordingDetails();
     $recordingDetails->setRecordingDate($publishStr);
     $video->setRecordingDetails($recordingDetails);
+
+    // IF PREVIEW: We simulate what would happen, but we used LIVE data for accurate preview.
+    // But wait, the preview block was earlier in the function. We moved fetching $video down here?
+    // Optimization: If preview, we usually want to show what WILL happen.
+    // The previous code had the Preview return block BEFORE fetching YouTube data.
+    // But now we NEED YouTube data (currentDesc) to construct the preview correctly.
+    // So we must fetch the video even in preview mode nicely.
+
+    if ($isPreview) {
+        return [
+            'success' => true,
+            'preview' => true,
+            'title' => $metadata['title'],
+            'desc' => $finalDesc,
+            'tags' => $metadata['tags'],
+            'driveLink' => $videoId ? "https://youtu.be/$videoId" : null,
+            'videoNum' => $videoNum,
+            'isRefresh' => true
+        ];
+    }
 
     $youtube->videos->update('snippet,status,recordingDetails', $video);
 
