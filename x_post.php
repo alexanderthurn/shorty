@@ -192,7 +192,7 @@ function postToX($videoNum, $config, $isMock = false, $isPreview = false)
         if (!isset($res['body']->media_id_string)) {
             if (file_exists($tempFile))
                 unlink($tempFile);
-            throw new Exception("X INIT Fehler: " . $res['raw']);
+            throw new Exception("X INIT Fehler: " . ($res['raw'] ?? 'Unknown error'));
         }
         $mediaId = $res['body']->media_id_string;
 
@@ -206,14 +206,39 @@ function postToX($videoNum, $config, $isMock = false, $isPreview = false)
             $chunk = fread($handle, 4 * 1024 * 1024);
             if (empty($chunk))
                 break;
+
             $params = ['command' => 'APPEND', 'media_id' => $mediaId, 'segment_index' => $segment, 'media' => base64_encode($chunk)];
-            $auth = get_oauth_header($upload_url, 'POST', $params, $ck, $cs, $at, $as);
-            $res = curl_request($upload_url, 'POST', $params, [$auth]);
-            if ($res['code'] != 204) {
+
+            // Retry logic for APPEND
+            $maxRetries = 3;
+            $success = false;
+            $lastError = '';
+
+            for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
+                try {
+                    $auth = get_oauth_header($upload_url, 'POST', $params, $ck, $cs, $at, $as);
+                    $res = curl_request($upload_url, 'POST', $params, [$auth]);
+
+                    if ($res['code'] >= 200 && $res['code'] < 300) {
+                        $success = true;
+                        break;
+                    } else {
+                        $lastError = "HTTP " . $res['code'] . ": " . ($res['raw'] ?? 'Unknown');
+                    }
+                } catch (Exception $e) {
+                    $lastError = $e->getMessage();
+                }
+
+                if ($attempt < $maxRetries) {
+                    sleep(2 * $attempt); // Backoff: 2s, 4s, 6s...
+                }
+            }
+
+            if (!$success) {
                 fclose($handle);
                 if (file_exists($tempFile))
                     unlink($tempFile);
-                throw new Exception("X APPEND Fehler at $segment");
+                throw new Exception("X APPEND Fehler at segment $segment after $maxRetries attempts. Last error: $lastError");
             }
             $segment++;
         }
