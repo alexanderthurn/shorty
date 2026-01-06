@@ -4,7 +4,7 @@ require_once 'config.php';
 /**
  * Kern-Logik für den Video-Upload zu YouTube.
  */
-function uploadToYouTube($videoNum, $config, $isMock = false)
+function uploadToYouTube($videoNum, $config, $isMock = false, $isPreview = false)
 {
     $client = getClient();
     $service = new Google\Service\Sheets($client);
@@ -35,6 +35,11 @@ function uploadToYouTube($videoNum, $config, $isMock = false)
                 'tags' => $tags,
                 'isUploaded' => !empty($row[7]) // Spalte H = Index 7
             ];
+
+            // 1.5 Footer Text anhängen
+            if (!empty($config['footer_text'])) {
+                $metadata['desc'] .= "\n\n" . $config['footer_text'];
+            }
             break;
         }
     }
@@ -43,7 +48,7 @@ function uploadToYouTube($videoNum, $config, $isMock = false)
         throw new Exception("Video-Nummer $videoNum nicht im Sheet gefunden.");
     }
 
-    if ($metadata['isUploaded']) {
+    if ($metadata['isUploaded'] && !$isPreview) {
         throw new Exception("Video #$videoNum wurde bereits auf YouTube hochgeladen.");
     }
 
@@ -60,20 +65,40 @@ function uploadToYouTube($videoNum, $config, $isMock = false)
     $publishDate->modify('+' . ($videoNum - 1) . ' days');
     $publishStr = $publishDate->format(DateTime::RFC3339);
 
-    // 3. Datei von Google Drive laden
+    // 3. Datei von Google Drive laden (für Preview Link holen)
     $drive = new Google\Service\Drive($client);
     $fileName = $videoNum . '.mp4';
     $files = $drive->files->listFiles([
         'q' => "'" . $folderId . "' in parents and name = '$fileName' and trashed = false",
-        'fields' => 'files(id, name)'
+        'fields' => 'files(id, name, webViewLink)'
     ]);
 
-    if (count($files->getFiles()) == 0) {
+    $fileId = null;
+    $webViewLink = null;
+
+    if (count($files->getFiles()) > 0) {
+        $driveFile = $files->getFiles()[0];
+        $fileId = $driveFile->getId();
+        $webViewLink = $driveFile->getWebViewLink();
+    } elseif (!$isPreview) {
         throw new Exception("Datei $fileName nicht gefunden.");
     }
 
-    $driveFile = $files->getFiles()[0];
-    $fileId = $driveFile->getId();
+    if ($isPreview) {
+        return [
+            'success' => true,
+            'preview' => true,
+            'title' => $metadata['title'],
+            'desc' => $metadata['desc'],
+            'tags' => $metadata['tags'],
+            'driveLink' => $webViewLink,
+            'videoNum' => $videoNum
+        ];
+    }
+
+    if (!$fileId) {
+        throw new Exception("Datei $fileName nicht gefunden (Upload Check).");
+    }
 
     $content = $drive->files->get($fileId, ['alt' => 'media']);
     $tempDir = __DIR__ . '/temp';
@@ -187,7 +212,8 @@ if (!defined('IN_NIGHTLY')) {
             throw new Exception("Falsches Passwort. Upload nicht erlaubt.");
         }
 
-        $result = uploadToYouTube($_POST['video_num'], $config);
+        $isPreview = isset($_POST['preview']) && $_POST['preview'] === 'true';
+        $result = uploadToYouTube($_POST['video_num'], $config, false, $isPreview);
         echo json_encode($result);
 
     } catch (Exception $e) {

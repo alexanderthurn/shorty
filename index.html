@@ -450,6 +450,58 @@
         .btn-cancel:hover {
             background: #cbd5e0;
         }
+
+        /* Wide Modal for Previews */
+        .wide-modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 16px;
+            max-width: 900px;
+            width: 95%;
+            max-height: 90vh;
+            /* Scrollable if too long */
+            overflow-y: auto;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            position: relative;
+            color: #333;
+            text-align: left;
+        }
+
+        .preview-item {
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            background: #fafafa;
+        }
+
+        .preview-header {
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #2c3e50;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 5px;
+        }
+
+        .preview-field {
+            margin-bottom: 8px;
+        }
+
+        .preview-label {
+            font-size: 0.8rem;
+            color: #718096;
+            text-transform: uppercase;
+            font-weight: bold;
+        }
+
+        .preview-val {
+            white-space: pre-wrap;
+            font-family: monospace;
+            background: white;
+            padding: 8px;
+            border: 1px solid #edf2f7;
+            border-radius: 4px;
+        }
     </style>
 </head>
 
@@ -463,8 +515,22 @@
     <div id="modal-overlay">
         <div class="modal-content">
             <h2 id="modal-title">Hinweis</h2>
-            <p id="modal-message"></p>
-            <button class="modal-close" onclick="closeModal()">OK</button>
+            <div id="modal-message"></div>
+            <div style="text-align:center; margin-top:20px;">
+                <button class="modal-close" onclick="closeModal()">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="wide-modal-overlay"
+        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:2100; justify-content:center; align-items:center; backdrop-filter:blur(3px);">
+        <div class="wide-modal-content">
+            <h2 id="wide-modal-title" style="margin-top:0;">Preview</h2>
+            <div id="wide-modal-body"></div>
+            <div style="text-align:right; margin-top:20px;">
+                <button class="modal-close"
+                    onclick="document.getElementById('wide-modal-overlay').style.display='none'">Schließen</button>
+            </div>
         </div>
     </div>
 
@@ -497,6 +563,10 @@
             <button class="btn" onclick="runBulkAction('upload')">Bulk YT Short</button>
             <button class="btn btn-refresh" onclick="runBulkAction('refresh')">Bulk YouTube Refresh</button>
             <button class="btn btn-x" onclick="runBulkAction('x_post')">Bulk X Post</button>
+            <button class="btn btn-secondary" style="background:#805ad5;" onclick="runBulkPreview('youtube')">YT
+                Preview</button>
+            <button class="btn btn-secondary" style="background:#d53f8c;" onclick="runBulkPreview('x_post')">X
+                Preview</button>
             <button class="btn btn-cancel" onclick="deselectAll()" style="padding: 8px 12px;">Auswahl aufheben</button>
         </div>
 
@@ -692,7 +762,10 @@
 
         function showModal(title, message) {
             document.getElementById('modal-title').innerText = title;
-            document.getElementById('modal-message').innerText = message;
+            // Allow HTML in message if needed, but usually innerText is safer. 
+            // Here we changed the p to div in HTML structure above, so let's stick to innerHTML if we want formatting, or innerText.
+            // But 'showModal' is legacy. Let's support both.
+            document.getElementById('modal-message').innerHTML = message;
             document.getElementById('modal-overlay').style.display = 'flex';
         }
 
@@ -788,6 +861,74 @@
             deselectAll();
             loadData();
             showModal("Bulk Fertig", `${ids.length} Videos wurden verarbeitet.`);
+        }
+
+        async function runBulkPreview(type) {
+            const checked = document.querySelectorAll('.video-checkbox:checked');
+            const ids = Array.from(checked).map(cb => cb.value);
+            if (ids.length === 0) return;
+
+            const hash = await getAuthHash();
+            if (!hash) return;
+
+            const projectId = getProjectId();
+            if (!projectId) return;
+
+            const overlay = document.getElementById('loading-overlay');
+            overlay.style.display = 'flex';
+            document.getElementById('status-text').innerText = "Generiere Preview...";
+
+            const endpoint = (type === 'youtube') ? 'upload.php' : 'x_post.php';
+            let html = "";
+
+            for (let i = 0; i < ids.length; i++) {
+                const nr = ids[i];
+                try {
+                    const fd = new FormData();
+                    fd.append('video_num', nr);
+                    fd.append('password', hash);
+                    fd.append('project', projectId);
+                    fd.append('preview', 'true'); // Flag for preview
+
+                    const res = await fetch(endpoint, { method: 'POST', body: fd });
+                    const data = await res.json();
+
+                    if (data.success && data.preview) {
+                        html += `<div class="preview-item">
+                            <div class="preview-header">Video #${data.videoNum} Preview (${type})</div>`;
+
+                        if (data.driveLink) {
+                            html += `<div class="preview-field"><a href="${data.driveLink}" target="_blank" style="color:#3182ce; font-weight:bold;">📽️ Google Drive Video Link</a></div>`;
+                        } else {
+                            html += `<div class="preview-field" style="color:red;">Link nicht gefunden</div>`;
+                        }
+
+                        if (data.title) {
+                            html += `<div class="preview-field"><div class="preview-label">Titel</div><div class="preview-val">${data.title}</div></div>`;
+                        }
+                        if (data.desc) {
+                            html += `<div class="preview-field"><div class="preview-label">Beschreibung</div><div class="preview-val">${data.desc}</div></div>`;
+                        }
+                        if (data.tags) {
+                            html += `<div class="preview-field"><div class="preview-label">Tags</div><div class="preview-val">${Array.isArray(data.tags) ? data.tags.join(', ') : data.tags}</div></div>`;
+                        }
+                        if (data.full_text) {
+                            html += `<div class="preview-field"><div class="preview-label">Tweet Text</div><div class="preview-val">${data.full_text}</div></div>`;
+                        }
+                        html += `</div>`;
+                    } else {
+                        html += `<div class="preview-item" style="color:red;">Fehler bei Video #${nr}: ${data.message}</div>`;
+                    }
+
+                } catch (e) {
+                    html += `<div class="preview-item" style="color:red;">Netzwerkfehler bei Video #${nr}</div>`;
+                }
+            }
+
+            overlay.style.display = 'none';
+            document.getElementById('wide-modal-title').innerText = (type === 'youtube' ? 'YouTube' : 'X (Twitter)') + ' Preview';
+            document.getElementById('wide-modal-body').innerHTML = html;
+            document.getElementById('wide-modal-overlay').style.display = 'flex';
         }
 
         async function runAction(nr, type) {

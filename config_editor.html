@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shorty Config Editor</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #f4f7f9;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+        }
+
+        h1 {
+            margin-top: 0;
+            color: #2c3e50;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        input[type="password"] {
+            padding: 8px 12px;
+            border: 1px solid #cbd5e0;
+            border-radius: 6px;
+            font-size: 1rem;
+            flex-grow: 1;
+            max-width: 300px;
+        }
+
+        button {
+            cursor: pointer;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 0.9rem;
+            color: white;
+            transition: background 0.2s;
+        }
+
+        .btn-primary {
+            background: #3182ce;
+        }
+
+        .btn-primary:hover {
+            background: #2b6cb0;
+        }
+
+        .btn-success {
+            background: #38a169;
+        }
+
+        .btn-success:hover {
+            background: #2f855a;
+        }
+
+        .btn-warn {
+            background: #dd6b20;
+        }
+
+        .btn-warn:hover {
+            background: #c05621;
+        }
+
+        .btn-secondary {
+            background: #718096;
+        }
+
+        .btn-secondary:hover {
+            background: #4a5568;
+        }
+
+        textarea {
+            width: 100%;
+            height: 600px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+            font-size: 14px;
+            padding: 10px;
+            border: 1px solid #cbd5e0;
+            border-radius: 6px;
+            box-sizing: border-box;
+            background: #fafafa;
+            color: #2d3748;
+        }
+
+        .status {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 6px;
+            display: none;
+        }
+
+        .status.error {
+            background: #fed7d7;
+            color: #822727;
+            display: block;
+        }
+
+        .status.success {
+            background: #c6f6d5;
+            color: #22543d;
+            display: block;
+        }
+
+        .status.info {
+            background: #bee3f8;
+            color: #2c5282;
+            display: block;
+        }
+
+        .auth-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.95);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+
+        .auth-box {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            border: 1px solid #e2e8f0;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="auth-overlay" id="auth-overlay">
+        <div class="auth-box">
+            <h2>🔒 Security Check</h2>
+            <p>Please enter the app password to access configuration.</p>
+            <input type="password" id="auth-password" placeholder="App Password"
+                onkeydown="if(event.key==='Enter') unlock()">
+            <br><br>
+            <button class="btn-primary" onclick="unlock()">Unlock Editor</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h1>⚙️ Configuration Editor</h1>
+            <a href="index.html" style="text-decoration:none; color:#3182ce; font-weight:bold;">&larr; Back to
+                Dashboard</a>
+        </div>
+
+        <div class="controls">
+            <button class="btn-primary" onclick="loadConfig()">Reload Current Config</button>
+            <button class="btn-warn" onclick="loadExample()">Load from Example</button>
+            <button class="btn-secondary" onclick="downloadBackup()">⬇️ Download Backup</button>
+            <div style="flex-grow:1;"></div>
+            <button class="btn-success" onclick="saveConfig()">💾 Save Changes</button>
+        </div>
+
+        <div style="margin-bottom: 20px; padding: 15px; background: #e2e8f0; border-radius: 8px;">
+            <h3 style="margin-top:0;">📺 YouTube Footer Manager</h3>
+            <p style="font-size:0.9rem; color:#4a5568;">Select a project to edit its footer text. Click "Update JSON" to
+                apply changes to the editor below.</p>
+
+            <div style="display:flex; gap:10px; margin-bottom:10px;">
+                <select id="footer-project-select" onchange="loadFooterFromSelection()"
+                    style="padding:8px; border-radius:6px; flex-grow:1;">
+                    <option value="">(Load config to see projects)</option>
+                </select>
+                <button class="btn-secondary" onclick="refreshFooterUI()">🔄 Refresh Projects from JSON</button>
+            </div>
+
+            <textarea id="footer-text-editor" style="height:120px; font-family:monospace; margin-bottom:10px;"
+                placeholder="Footer text... starts with *** Werteherren ***"></textarea>
+
+            <button class="btn-success" onclick="applyFooterToJSON()">Update Footer in JSON</button>
+        </div>
+
+        <textarea id="json-editor" spellcheck="false" placeholder="JSON content will appear here..."></textarea>
+        <div id="status-msg" class="status"></div>
+    </div>
+
+    <script>
+        // Use the SHA256 helper logic from index.html if we want to store/compare hash client side?
+        // But here the handler expects the SHA256 hash. 
+        // Let's implement the hashing here or reuse if user inputs the plaintext password.
+
+        // Assuming user knows the plaintext password. We need to hash it before sending to PHP because PHP compares against the stored HASH.
+        // Wait, index.html sends the hash. config.php has UPLOAD_PASSWORD_HASH.
+        // config_handler.php compares $_POST['password'] === UPLOAD_PASSWORD_HASH.
+
+        let authHash = localStorage.getItem('upload_pw_hash');
+
+        async function sha256(message) {
+            const msgBuffer = new TextEncoder().encode(message);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        async function unlock() {
+            const pwInput = document.getElementById('auth-password');
+            const pw = pwInput.value;
+            if (!pw) return;
+
+            // If the user enters the hash directly (unlikely) vs plaintext.
+            // Index.html logic: user enters plaintext -> JS hashes it -> saves to localStorage -> sends hash to API.
+            // API expects the HASH.
+
+            const hash = await sha256(pw);
+            authHash = hash;
+
+            // Try to load to verify auth
+            showStatus('Checking auth...', 'info');
+            try {
+                const fd = new FormData();
+                fd.append('action', 'load');
+                fd.append('password', authHash);
+
+                const res = await fetch('config_editor.php', { method: 'POST', body: fd });
+                const json = await res.json();
+
+                if (json.success) {
+                    document.getElementById('auth-overlay').style.display = 'none';
+                    document.getElementById('json-editor').value = json.content;
+                    showStatus('Configuration loaded.', 'success');
+                    // Store hash for session-like feel (or relying on shared localStorage from index.html)
+                    localStorage.setItem('upload_pw_hash', authHash);
+                } else {
+                    showStatus('Authentication failed: ' + json.message, 'error');
+                    authHash = null;
+                }
+            } catch (e) {
+                showStatus('Network error.', 'error');
+            }
+        }
+
+        // Auto-unlock if hash exists in localStorage
+        window.addEventListener('load', async () => {
+            if (authHash) {
+                // Verify silently
+                const fd = new FormData();
+                fd.append('action', 'load');
+                fd.append('password', authHash);
+                try {
+                    const res = await fetch('config_editor.php', { method: 'POST', body: fd });
+                    const json = await res.json();
+                    if (json.success) {
+                        document.getElementById('auth-overlay').style.display = 'none';
+                        document.getElementById('json-editor').value = json.content;
+                    }
+                } catch (e) { }
+            }
+        });
+
+        function showStatus(msg, type) {
+            const el = document.getElementById('status-msg');
+            el.className = 'status ' + type;
+            el.innerText = msg;
+            // Auto hide success after 3s
+            if (type === 'success') {
+                setTimeout(() => { el.style.display = 'none'; }, 3000);
+            }
+        }
+
+        async function loadConfig() {
+            if (!authHash) { location.reload(); return; }
+
+            const fd = new FormData();
+            fd.append('action', 'load');
+            fd.append('password', authHash);
+
+            try {
+                const res = await fetch('config_editor.php', { method: 'POST', body: fd });
+                const json = await res.json();
+                if (json.success) {
+                    document.getElementById('json-editor').value = json.content;
+                    showStatus('Reloaded successfully.', 'success');
+                } else {
+                    showStatus(json.message, 'error');
+                }
+            } catch (e) { showStatus(e.message, 'error'); }
+        }
+
+        async function loadExample() {
+            if (!authHash) return;
+            if (!confirm("This will overwrite the current editor content with the example configuration. Continue?")) return;
+
+            const fd = new FormData();
+            fd.append('action', 'load_example');
+            fd.append('password', authHash);
+
+            try {
+                const res = await fetch('config_handler.php', { method: 'POST', body: fd });
+                const json = await res.json();
+                if (json.success) {
+                    document.getElementById('json-editor').value = json.content;
+                    showStatus('Example configuration loaded.', 'success');
+                } else {
+                    showStatus(json.message, 'error');
+                }
+            } catch (e) { showStatus(e.message, 'error'); }
+        }
+
+        function downloadBackup() {
+            if (!authHash) { alert("Please log in first."); return; }
+            const content = document.getElementById('json-editor').value;
+            if (!content) { alert("No content to download."); return; }
+
+            const blob = new Blob([content], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'client_secret_backup_' + new Date().toISOString().slice(0, 10) + '.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        async function saveConfig() {
+            if (!authHash) return;
+
+            const content = document.getElementById('json-editor').value;
+
+            // Client side validation
+            try {
+                JSON.parse(content);
+            } catch (e) {
+                showStatus("Invalid JSON: " + e.message, 'error');
+                return;
+            }
+
+            if (!confirm("Are you sure you want to save this configuration? Incorrect values may break the application.")) return;
+
+            showStatus("Saving...", "info");
+
+            const fd = new FormData();
+            fd.append('action', 'save');
+            fd.append('password', authHash);
+            fd.append('content', content);
+
+            try {
+                const res = await fetch('config_handler.php', { method: 'POST', body: fd });
+                const json = await res.json();
+                if (json.success) {
+                    showStatus(json.message, 'success');
+                } else {
+                    showStatus('Save failed: ' + json.message, 'error');
+                }
+            } catch (e) { showStatus(e.message, 'error'); }
+        }
+
+        // --- Footer Manager Logic ---
+
+        function getJsonContent() {
+            try {
+                return JSON.parse(document.getElementById('json-editor').value);
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function refreshFooterUI() {
+            const data = getJsonContent();
+            const select = document.getElementById('footer-project-select');
+
+            if (!data) {
+                select.innerHTML = '<option value="">Invalid JSON in editor</option>';
+                return;
+            }
+
+            // Support both root-level projects array (new schema) and legacy nesting if any
+            let projects = [];
+            if (Array.isArray(data.projects)) {
+                projects = data.projects;
+            } else if (data.projects && Array.isArray(data.projects.projects)) {
+                // Fallback just in case
+                projects = data.projects.projects;
+            }
+
+            select.innerHTML = '<option value="">Select a project...</option>';
+
+            if (projects.length === 0) {
+                const opt = document.createElement('option');
+                opt.text = "No projects found";
+                select.appendChild(opt);
+                return;
+            }
+
+            projects.forEach((p, index) => {
+                const opt = document.createElement('option');
+                opt.value = index;
+                opt.text = (p.title || 'Untitled') + ' (' + (p.id || 'no-id') + ')';
+                select.appendChild(opt);
+            });
+
+            // Clear editor
+            document.getElementById('footer-text-editor').value = '';
+        }
+
+        function loadFooterFromSelection() {
+            const index = document.getElementById('footer-project-select').value;
+            if (index === '') {
+                document.getElementById('footer-text-editor').value = '';
+                return;
+            }
+
+            const data = getJsonContent();
+            // Assuming structure didn't change since refresh
+            if (data && data.projects && data.projects[index]) {
+                document.getElementById('footer-text-editor').value = data.projects[index].footer_text || '';
+            }
+        }
+
+        function applyFooterToJSON() {
+            const index = document.getElementById('footer-project-select').value;
+            if (index === '') {
+                alert("Please select a project first.");
+                return;
+            }
+
+            const text = document.getElementById('footer-text-editor').value;
+            let rawJson = document.getElementById('json-editor').value;
+
+            try {
+                const data = JSON.parse(rawJson);
+                if (!data.projects || !data.projects[index]) {
+                    alert("Project structure in JSON seems to have changed. Please refresh projects.");
+                    return;
+                }
+
+                data.projects[index].footer_text = text;
+
+                // Preserve formatting
+                document.getElementById('json-editor').value = JSON.stringify(data, null, 4);
+                showStatus("Footer text updated in JSON editor. Remember to Save Changes!", "info");
+
+                // Re-select to keep state? No, refreshing might reset selection if we aren't careful, 
+                // but we didn't call refreshFooterUI here.
+            } catch (e) {
+                alert("Invalid JSON in main editor. Cannot update.");
+            }
+        }
+    </script>
+</body>
+
+</html>

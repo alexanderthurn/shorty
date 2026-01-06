@@ -77,7 +77,7 @@ if (!function_exists('curl_request')) {
 /**
  * Kern-Logik für den Post auf X.
  */
-function postToX($videoNum, $config, $isMock = false)
+function postToX($videoNum, $config, $isMock = false, $isPreview = false)
 {
     $client = getClient();
     $service = new Google\Service\Sheets($client);
@@ -116,11 +116,34 @@ function postToX($videoNum, $config, $isMock = false)
 
     if (!$metadata)
         throw new Exception("Video #$videoNum nicht gefunden.");
-    if ($tweetId)
+    if ($tweetId && !$isPreview)
         throw new Exception("Dieses Video wurde bereits auf X gepostet (ID: $tweetId)");
 
     if ($isMock) {
         return ['success' => true, 'message' => "[MOCK] Video #$videoNum würde jetzt gepostet werden.", 'mock' => true];
+    }
+
+    // --- PREVIEW MODE ---
+    if ($isPreview) {
+        // Find Drive Link
+        $drive = new Google\Service\Drive($client);
+        $files = $drive->files->listFiles([
+            'q' => "'" . $folderId . "' in parents and name = '$videoNum.mp4' and trashed = false",
+            'fields' => 'files(id, name, webViewLink)'
+        ]);
+
+        $driveLink = null;
+        if (count($files->getFiles()) > 0) {
+            $driveLink = $files->getFiles()[0]->getWebViewLink();
+        }
+
+        return [
+            'success' => true,
+            'preview' => true,
+            'full_text' => $metadata['full_text'],
+            'driveLink' => $driveLink,
+            'videoNum' => $videoNum
+        ];
     }
 
     $secrets = json_decode(file_get_contents(__DIR__ . '/client_secret.json'), true)['x'];
@@ -261,7 +284,8 @@ if (!defined('IN_NIGHTLY')) {
         if (!isset($_POST['password']) || $_POST['password'] !== $expectedHash)
             throw new Exception("Passwort falsch.");
 
-        $result = postToX($_POST['video_num'], $config);
+        $isPreview = isset($_POST['preview']) && $_POST['preview'] === 'true';
+        $result = postToX($_POST['video_num'], $config, false, $isPreview);
         echo json_encode($result);
 
     } catch (Throwable $e) {
