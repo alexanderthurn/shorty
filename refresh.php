@@ -4,7 +4,7 @@ set_time_limit(600);
 
 require_once 'config.php';
 
-function refreshMetadata($videoNum, $config)
+function refreshMetadata($videoNum, $config, $isPreview = false)
 {
     $client = getClient();
 
@@ -39,10 +39,32 @@ function refreshMetadata($videoNum, $config)
         }
     }
 
-    if (!$videoId)
+    if (!$videoId && !$isPreview)
         throw new Exception("Video-ID für #$videoNum nicht im Sheet gefunden.");
     if (!$metadata)
         throw new Exception("Video-Nummer $videoNum nicht im Sheet gefunden.");
+
+    // Config global footer
+    $footerText = $config['footer_text'] ?? '';
+    if (!empty($footerText)) {
+        $metadata['desc'] .= "\n\n" . $footerText;
+    }
+
+    if ($isPreview) {
+        return [
+            'success' => true,
+            'preview' => true,
+            'title' => $metadata['title'],
+            'desc' => $metadata['desc'],
+            'tags' => $metadata['tags'],
+            'driveLink' => $videoId ? "https://youtu.be/$videoId" : null, // Show YT link if available
+            'videoNum' => $videoNum,
+            'isRefresh' => true // Hint for UI to show it's existing video
+        ];
+    }
+
+    if (!$videoId)
+        throw new Exception("Video-ID für #$videoNum nicht im Sheet gefunden.");
 
     // 2. Datum berechnen (für Recording Date)
     $publishDate = new DateTime($startDate);
@@ -70,7 +92,22 @@ function refreshMetadata($videoNum, $config)
 
     // Status (Publish Date)
     $status = $video->getStatus();
-    $status->setPublishAt($publishStr);
+
+    // Nur setzen, wenn Datum in der Zukunft liegt, sonst wirft YouTube Fehler (invalidPublishAt)
+    // oder wenn Video noch private ist und scheduled werden soll.
+    // Aber sicherheitshalber: Past dates sind für Scheduling verboten.
+    $now = new DateTime();
+    if ($publishDate > $now) {
+        $status->setPublishAt($publishStr);
+    } else {
+        // Wenn Datum in Vergangenheit: PublishAt nicht setzen (löschen/nullen geht via API oft nicht direkt so einfach,
+        // aber wir senden es einfach nicht erneut, wenn es schon public ist).
+        // Falls das Video 'private' ist und eigentlich veröffentlich sein SOLLTE, müssten wir status->privacyStatus = 'public' setzen.
+        // Das Skript ging bisher davon aus, dass wir schedulen.
+        // Wir lassen PublishAt hier weg, um den Fehler zu vermeiden.
+        // Optional: $status->setPrivacyStatus('public'); falls gewünscht, aber Refresh sollte primär Metadaten fixen.
+    }
+
     $video->setStatus($status);
 
     // Recording Details
@@ -148,6 +185,7 @@ try {
     $projectId = $_POST['project'];
     $config = getProjectConfig($projectId);
     $videoNum = $_POST['video_num'];
+    $isPreview = isset($_POST['preview']) && $_POST['preview'] === 'true';
 
     // Passwort-Prüfung - Global
     $expectedHash = UPLOAD_PASSWORD_HASH;
@@ -156,7 +194,7 @@ try {
         throw new Exception("Falsches Passwort. Zugriff verweigert.");
     }
 
-    $result = refreshMetadata($videoNum, $config);
+    $result = refreshMetadata($videoNum, $config, $isPreview);
     echo json_encode($result);
 
 } catch (Exception $e) {

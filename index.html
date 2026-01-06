@@ -502,6 +502,84 @@
             border: 1px solid #edf2f7;
             border-radius: 4px;
         }
+
+        /* Tweet Styling */
+        .tweet-card {
+            background: white;
+            border: 1px solid #cfd9de;
+            border-radius: 12px;
+            padding: 12px 16px;
+            max-width: 500px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin-bottom: 20px;
+        }
+
+        .tweet-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 4px;
+        }
+
+        .tweet-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: #cbd5e0;
+            margin-right: 12px;
+        }
+
+        .tweet-names {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .tweet-name {
+            font-weight: bold;
+            color: #0f1419;
+            font-size: 15px;
+        }
+
+        .tweet-handle {
+            color: #536471;
+            font-size: 15px;
+        }
+
+        .tweet-body {
+            font-size: 15px;
+            color: #0f1419;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            margin-bottom: 12px;
+        }
+
+        .tweet-media {
+            border-radius: 12px;
+            background: #efefef;
+            overflow: hidden;
+            border: 1px solid #cfd9de;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 200px;
+        }
+
+        .tweet-link {
+            color: #1d9bf0;
+            text-decoration: none;
+        }
+
+        .tweet-link:hover {
+            text-decoration: underline;
+        }
+
+        .tweet-actions-mock {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 12px;
+            color: #536471;
+            font-size: 18px;
+            max-width: 80%;
+        }
     </style>
 </head>
 
@@ -527,9 +605,10 @@
         <div class="wide-modal-content">
             <h2 id="wide-modal-title" style="margin-top:0;">Preview</h2>
             <div id="wide-modal-body"></div>
-            <div style="text-align:right; margin-top:20px;">
-                <button class="modal-close"
-                    onclick="document.getElementById('wide-modal-overlay').style.display='none'">Schließen</button>
+            <div style="text-align:right; margin-top:20px; display:flex; justify-content:flex-end; gap:10px;">
+                <button class="modal-close btn-cancel"
+                    onclick="document.getElementById('wide-modal-overlay').style.display='none'">Abbrechen</button>
+                <button class="modal-close btn-success" id="wide-modal-confirm">Fortfahren & Ausführen</button>
             </div>
         </div>
     </div>
@@ -560,13 +639,10 @@
 
         <div class="bulk-actions" id="bulk-bar" style="display:none;">
             <span id="selected-count">0 Videos ausgewählt</span>
-            <button class="btn" onclick="runBulkAction('upload')">Bulk YT Short</button>
-            <button class="btn btn-refresh" onclick="runBulkAction('refresh')">Bulk YouTube Refresh</button>
-            <button class="btn btn-x" onclick="runBulkAction('x_post')">Bulk X Post</button>
-            <button class="btn btn-secondary" style="background:#805ad5;" onclick="runBulkPreview('youtube')">YT
-                Preview</button>
-            <button class="btn btn-secondary" style="background:#d53f8c;" onclick="runBulkPreview('x_post')">X
-                Preview</button>
+            <span id="selected-count">0 Videos ausgewählt</span>
+            <button class="btn" onclick="initiateBulkAction('upload')">Bulk YT Short</button>
+            <button class="btn btn-refresh" onclick="initiateBulkAction('refresh')">Bulk YouTube Refresh</button>
+            <button class="btn btn-x" onclick="initiateBulkAction('x_post')">Bulk X Post</button>
             <button class="btn btn-cancel" onclick="deselectAll()" style="padding: 8px 12px;">Auswahl aufheben</button>
         </div>
 
@@ -814,9 +890,15 @@
             });
         }
 
-        async function runBulkAction(type) {
-            const checked = document.querySelectorAll('.video-checkbox:checked');
-            const ids = Array.from(checked).map(cb => cb.value);
+        async function initiateBulkAction(type, specificId = null) {
+            // 1. Checks
+            let ids = [];
+            if (specificId) {
+                ids = [specificId.toString()];
+            } else {
+                const checked = document.querySelectorAll('.video-checkbox:checked');
+                ids = Array.from(checked).map(cb => cb.value);
+            }
             if (ids.length === 0) return;
 
             const hash = await getAuthHash();
@@ -825,13 +907,127 @@
             const projectId = getProjectId();
             if (!projectId) return;
 
-            // Bulk Execution one by one
+            // 2. Preview Phase
             const overlay = document.getElementById('loading-overlay');
             overlay.style.display = 'flex';
+            document.getElementById('status-text').innerText = "Generiere Preview...";
+
+            const isX = (type === 'x_post');
+            const endpoint = isX ? 'x_post.php' : (type === 'refresh' ? 'refresh.php' : 'upload.php');
+
+
+
+            let html = "";
+            let atLeastOneSuccess = false;
 
             for (let i = 0; i < ids.length; i++) {
                 const nr = ids[i];
-                document.getElementById('status-text').innerText = `[${i + 1}/${ids.length}] Video #${nr} wird verarbeitet...`;
+                try {
+                    const fd = new FormData();
+                    fd.append('video_num', nr);
+                    fd.append('password', hash);
+                    fd.append('project', projectId);
+                    fd.append('preview', 'true');
+
+                    const res = await fetch(endpoint, { method: 'POST', body: fd });
+                    const data = await res.json();
+
+                    if (data.success && data.preview) {
+                        atLeastOneSuccess = true;
+
+                        if (isX) {
+                            // Render Tweet Style
+                            const tweetText = (data.full_text || "").replace(/#(\w+)/g, '<span style="color:#1d9bf0">#$1</span>');
+
+                            html += `<div class="preview-item">
+                                <div class="preview-header">Video #${data.videoNum} Preview (X Post)</div>
+                                <div class="tweet-card">
+                                    <div class="tweet-header">
+                                        <div class="tweet-avatar"></div>
+                                        <div class="tweet-names">
+                                            <span class="tweet-name">Bitcoin Shorty</span>
+                                            <span class="tweet-handle">@ShortyApp</span>
+                                        </div>
+                                    </div>
+                                    <div class="tweet-body">${tweetText}</div>
+                                    <div class="tweet-media">
+                                        ${data.driveLink ?
+                                    `<video src="${data.driveLink}" controls style="max-width:100%; max-height:300px;"></video>` :
+                                    `<div style="padding:20px; color:#536471;">(Video nicht verfügbar)</div>`
+                                }
+                                    </div>
+                                     ${data.driveLink ? `<div style="margin-top:5px; font-size:0.8rem;"><a href="${data.driveLink}" target="_blank" class="tweet-link">Direktlink zum Video (Drive)</a></div>` : ''}
+                                    <div class="tweet-actions-mock">
+                                        <span>💬</span><span>Example</span><span>❤️</span><span>⬆️</span>
+                                    </div>
+                                </div>
+                            </div>`;
+
+                        } else {
+                            // Render YouTube Style (Standard List)
+                            html += `<div class="preview-item">
+                                <div class="preview-header">Video #${data.videoNum} Preview (YouTube)</div>`;
+
+                            if (data.driveLink) {
+                                const linkLabel = (type === 'refresh' || data.isRefresh) ? '📽️ Video Link (YouTube)' : '📽️ Video Link (Drive)';
+                                html += `<div class="preview-field"><a href="${data.driveLink}" target="_blank" style="color:#3182ce; font-weight:bold;">${linkLabel}</a></div>`;
+                            } else {
+                                html += `<div class="preview-field" style="color:red;">Link nicht gefunden</div>`;
+                            }
+
+                            if (data.title) {
+                                html += `<div class="preview-field"><div class="preview-label">Titel</div><div class="preview-val">${data.title}</div></div>`;
+                            }
+                            if (data.desc) {
+                                html += `<div class="preview-field"><div class="preview-label">Beschreibung</div><div class="preview-val">${data.desc}</div></div>`;
+                            }
+                            if (data.tags) {
+                                html += `<div class="preview-field"><div class="preview-label">Tags</div><div class="preview-val">${Array.isArray(data.tags) ? data.tags.join(', ') : data.tags}</div></div>`;
+                            }
+                            html += `</div>`;
+                        }
+
+                    } else {
+                        html += `<div class="preview-item" style="color:red;">Fehler bei Video #${nr}: ${data.message}</div>`;
+                    }
+
+                } catch (e) {
+                    html += `<div class="preview-item" style="color:red;">Netzwerkfehler bei Video #${nr}</div>`;
+                }
+            }
+
+            overlay.style.display = 'none';
+            document.getElementById('wide-modal-title').innerText = (isX ? 'X (Twitter)' : 'YouTube') + ' Vorschau';
+            document.getElementById('wide-modal-body').innerHTML = html;
+
+            // Setup Confirm Button
+            const confirmBtn = document.getElementById('wide-modal-confirm');
+
+            if (!atLeastOneSuccess) {
+                confirmBtn.style.display = 'none';
+            } else {
+                confirmBtn.style.display = 'inline-block';
+                // Remove old listeners to avoid stacking
+                const newBtn = confirmBtn.cloneNode(true);
+                confirmBtn.parentNode.replaceChild(newBtn, confirmBtn);
+
+                newBtn.addEventListener('click', () => {
+                    document.getElementById('wide-modal-overlay').style.display = 'none';
+                    executeBulkAction(type, ids, hash, projectId);
+                });
+            }
+
+            document.getElementById('wide-modal-overlay').style.display = 'flex';
+        }
+
+        async function executeBulkAction(type, ids, hash, projectId) {
+            const overlay = document.getElementById('loading-overlay');
+            overlay.style.display = 'flex';
+            let hasError = false;
+
+            for (let i = 0; i < ids.length; i++) {
+                const nr = ids[i];
+                document.getElementById('status-text').innerText = `[${i + 1}/${ids.length}] Video #${nr} wird ausgeführt...`;
 
                 try {
                     const fd = new FormData();
@@ -848,11 +1044,13 @@
                     const data = await res.json();
 
                     if (!data.success) {
-                        showModal("Abbruch während Bulk", `Fehler bei Video #${nr}: ` + data.message);
+                        showModal("Abbruch", `Fehler bei Video #${nr}: ` + data.message);
+                        hasError = true;
                         break;
                     }
                 } catch (e) {
                     showModal("Netzwerkfehler", `Abbruch bei Video #${nr}`);
+                    hasError = true;
                     break;
                 }
             }
@@ -860,124 +1058,18 @@
             overlay.style.display = 'none';
             deselectAll();
             loadData();
-            showModal("Bulk Fertig", `${ids.length} Videos wurden verarbeitet.`);
-        }
 
-        async function runBulkPreview(type) {
-            const checked = document.querySelectorAll('.video-checkbox:checked');
-            const ids = Array.from(checked).map(cb => cb.value);
-            if (ids.length === 0) return;
-
-            const hash = await getAuthHash();
-            if (!hash) return;
-
-            const projectId = getProjectId();
-            if (!projectId) return;
-
-            const overlay = document.getElementById('loading-overlay');
-            overlay.style.display = 'flex';
-            document.getElementById('status-text').innerText = "Generiere Preview...";
-
-            const endpoint = (type === 'youtube') ? 'upload.php' : 'x_post.php';
-            let html = "";
-
-            for (let i = 0; i < ids.length; i++) {
-                const nr = ids[i];
-                try {
-                    const fd = new FormData();
-                    fd.append('video_num', nr);
-                    fd.append('password', hash);
-                    fd.append('project', projectId);
-                    fd.append('preview', 'true'); // Flag for preview
-
-                    const res = await fetch(endpoint, { method: 'POST', body: fd });
-                    const data = await res.json();
-
-                    if (data.success && data.preview) {
-                        html += `<div class="preview-item">
-                            <div class="preview-header">Video #${data.videoNum} Preview (${type})</div>`;
-
-                        if (data.driveLink) {
-                            html += `<div class="preview-field"><a href="${data.driveLink}" target="_blank" style="color:#3182ce; font-weight:bold;">📽️ Google Drive Video Link</a></div>`;
-                        } else {
-                            html += `<div class="preview-field" style="color:red;">Link nicht gefunden</div>`;
-                        }
-
-                        if (data.title) {
-                            html += `<div class="preview-field"><div class="preview-label">Titel</div><div class="preview-val">${data.title}</div></div>`;
-                        }
-                        if (data.desc) {
-                            html += `<div class="preview-field"><div class="preview-label">Beschreibung</div><div class="preview-val">${data.desc}</div></div>`;
-                        }
-                        if (data.tags) {
-                            html += `<div class="preview-field"><div class="preview-label">Tags</div><div class="preview-val">${Array.isArray(data.tags) ? data.tags.join(', ') : data.tags}</div></div>`;
-                        }
-                        if (data.full_text) {
-                            html += `<div class="preview-field"><div class="preview-label">Tweet Text</div><div class="preview-val">${data.full_text}</div></div>`;
-                        }
-                        html += `</div>`;
-                    } else {
-                        html += `<div class="preview-item" style="color:red;">Fehler bei Video #${nr}: ${data.message}</div>`;
-                    }
-
-                } catch (e) {
-                    html += `<div class="preview-item" style="color:red;">Netzwerkfehler bei Video #${nr}</div>`;
-                }
+            if (!hasError) {
+                showModal("Fertig", "Aktion abgeschlossen.");
             }
-
-            overlay.style.display = 'none';
-            document.getElementById('wide-modal-title').innerText = (type === 'youtube' ? 'YouTube' : 'X (Twitter)') + ' Preview';
-            document.getElementById('wide-modal-body').innerHTML = html;
-            document.getElementById('wide-modal-overlay').style.display = 'flex';
         }
+
+
+
 
         async function runAction(nr, type) {
-            const hash = await getAuthHash();
-            if (!hash) return;
-            executeAction(nr, hash, type);
-        }
-
-        async function executeAction(nr, hash, type) {
-            const overlay = document.getElementById('loading-overlay');
-            overlay.style.display = 'flex';
-            const actionText = {
-                'upload': 'wird an YouTube übertragen...',
-                'refresh': 'Metadaten werden aktualisiert...',
-                'x_post': 'wird auf X gepostet...'
-            };
-            document.getElementById('status-text').innerText = `Video #${nr} ${actionText[type]}`;
-
-            const projectId = getProjectId();
-
-            try {
-                const fd = new FormData();
-                fd.append('video_num', nr);
-                fd.append('password', hash);
-                fd.append('project', projectId);
-
-                const endpointMap = {
-                    'upload': 'upload.php',
-                    'refresh': 'refresh.php',
-                    'x_post': 'x_post.php'
-                };
-                const res = await fetch(endpointMap[type], { method: 'POST', body: fd });
-                const data = await res.json();
-
-                if (data.success) {
-                    showModal("Erfolg!", data.message || `Video #${nr} wurde verarbeitet.`);
-                    loadData();
-                } else {
-                    showModal("Fehler", data.message);
-                    if (data.message.includes("Passwort")) {
-                        localStorage.removeItem('upload_pw_hash');
-                        location.reload();
-                    }
-                }
-            } catch (e) {
-                showModal("Fehler", "Netzwerkfehler oder Server-Timeout.");
-            } finally {
-                overlay.style.display = 'none';
-            }
+            // Unified flow: use initiateBulkAction for single item too
+            initiateBulkAction(type, nr);
         }
 
         init();
