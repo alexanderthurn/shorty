@@ -54,6 +54,11 @@
             border: 2px solid #ed8936;
         }
 
+        .row-today {
+            background-color: #ebf8ff !important;
+            border-left: 5px solid #3182ce !important;
+        }
+
         .badge {
             padding: 4px 8px;
             border-radius: 5px;
@@ -525,6 +530,12 @@
                 const nextPending = [...json.data].reverse().find(item => !item.isUploaded);
                 let scrolled = false;
 
+                const todayStr = new Date().toLocaleDateString('de-DE', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric'
+                });
+
                 let html = `<table><thead><tr>
                     <th class="checkbox-col"><input type="checkbox" id="select-all" onclick="toggleAll(this)"></th>
                     <th>Nr</th><th>Titel (Sheet)</th><th>Info / Dateien</th><th>Links</th><th>Aktion</th>
@@ -543,7 +554,14 @@
                         ? `<a href="${item.srtLink}" target="_blank" class="badge bg-ok">SRT ✔</a>`
                         : `<span class="badge bg-err">SRT ✘</span>`;
 
-                    html += `<tr class="${isDone ? 'row-done' : (isNext ? 'row-next' : '')}" ${isNext ? 'id="next-video"' : ''}>
+                    const isToday = item.datum.startsWith(todayStr);
+
+                    let rowClass = '';
+                    if (isToday) rowClass = 'row-today';
+                    else if (isDone) rowClass = 'row-done';
+                    else if (isNext) rowClass = 'row-next';
+
+                    html += `<tr class="${rowClass}" ${isNext ? 'id="next-video"' : ''}>
                 <td class="checkbox-col" data-label="Auswahl"><input type="checkbox" class="video-checkbox" value="${item.nr}" onchange="updateBulkBar()"></td>
                 <td data-label="Nr"><strong>#${item.nr}</strong></td>
                 <td data-label="Titel"><a href="${item.sheetLink}" target="_blank" class="sheet-link">${item.titel}</a></td>
