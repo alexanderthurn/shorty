@@ -4,26 +4,19 @@ set_time_limit(600);
 
 require_once 'config.php';
 
-try {
+function refreshMetadata($videoNum, $config)
+{
     $client = getClient();
-    if (!isset($_POST['video_num'])) {
-        throw new Exception("Keine Video-Nummer übergeben.");
-    }
 
-    // Passwort-Prüfung gegen Hash in client_secret.json (unterstützt alt/neu)
-    $secrets = json_decode(file_get_contents(__DIR__ . '/client_secret.json'), true);
-    $c = $secrets['app'] ?? $secrets['app_config'] ?? [];
-    $expectedHash = $c['password'] ?? '';
-
-    if (!isset($_POST['password']) || $_POST['password'] !== $expectedHash) {
-        throw new Exception("Falsches Passwort. Zugriff verweigert.");
-    }
-
-    $videoNum = $_POST['video_num'];
+    $sheetId = $config['sheet_id'];
+    $sheetName = $config['sheet_name'] ?? 'Themen';
+    $folderId = $config['folder_id'];
+    $playlistId = $config['playlist_id'];
+    $startDate = $config['start_date'] ?? '2026-01-01 21:21:00';
 
     // 1. Daten aus Google Sheet holen (inkl Spalte H für VideoID)
     $service = new Google\Service\Sheets($client);
-    $response = $service->spreadsheets_values->get(SHEET_ID, SHEET_NAME . '!A2:H420');
+    $response = $service->spreadsheets_values->get($sheetId, $sheetName . '!A2:H420');
     $rows = $response->getValues();
     $metadata = null;
     $videoId = null;
@@ -52,7 +45,7 @@ try {
         throw new Exception("Video-Nummer $videoNum nicht im Sheet gefunden.");
 
     // 2. Datum berechnen (für Recording Date)
-    $publishDate = new DateTime('2026-01-01 21:21:00');
+    $publishDate = new DateTime($startDate);
     $publishDate->modify('+' . ($videoNum - 1) . ' days');
     $publishStr = $publishDate->format(DateTime::RFC3339);
 
@@ -91,7 +84,7 @@ try {
     try {
         $playlistItem = new Google\Service\YouTube\PlaylistItem();
         $playlistSnippet = new Google\Service\YouTube\PlaylistItemSnippet();
-        $playlistSnippet->setPlaylistId(PLAYLIST_ID);
+        $playlistSnippet->setPlaylistId($playlistId);
         $resourceId = new Google\Service\YouTube\ResourceId();
         $resourceId->setKind('youtube#video');
         $resourceId->setVideoId($videoId);
@@ -105,7 +98,7 @@ try {
     // 5. SRT prüfen und ggf. hochladen
     $drive = new Google\Service\Drive($client);
     $srtName = $videoNum . '.srt';
-    $srtFiles = $drive->files->listFiles(['q' => "'" . FOLDER_ID . "' in parents and name = '$srtName' and trashed = false"]);
+    $srtFiles = $drive->files->listFiles(['q' => "'" . $folderId . "' in parents and name = '$srtName' and trashed = false"]);
 
     $srtStatus = "Kein SRT vorhanden";
     if (count($srtFiles->getFiles()) > 0) {
@@ -137,12 +130,36 @@ try {
         }
     }
 
-    echo json_encode([
+    return [
         'success' => true,
         'message' => "Video #$videoNum aktualisiert. $srtStatus.",
         'videoId' => $videoId
-    ]);
+    ];
+}
+
+try {
+    if (!isset($_POST['video_num'])) {
+        throw new Exception("Keine Video-Nummer übergeben.");
+    }
+    if (!isset($_POST['project'])) {
+        throw new Exception("Kein Projekt übergeben.");
+    }
+
+    $projectId = $_POST['project'];
+    $config = getProjectConfig($projectId);
+    $videoNum = $_POST['video_num'];
+
+    // Passwort-Prüfung - Global
+    $expectedHash = UPLOAD_PASSWORD_HASH;
+
+    if (!isset($_POST['password']) || $_POST['password'] !== $expectedHash) {
+        throw new Exception("Falsches Passwort. Zugriff verweigert.");
+    }
+
+    $result = refreshMetadata($videoNum, $config);
+    echo json_encode($result);
 
 } catch (Exception $e) {
+    http_response_code(400);
     echo json_encode(['success' => false, 'message' => $e->getMessage()]);
 }

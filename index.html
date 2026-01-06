@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shorty Dashboard v3.1</title>
+    <title>Shorty Dashboard</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -20,6 +20,8 @@
 
         h1 {
             color: #2c3e50;
+            display: inline-block;
+            margin-right: 15px;
         }
 
         table {
@@ -162,6 +164,22 @@
             justify-content: space-between;
             align-items: center;
             margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .project-selector-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        #project-select {
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid #cbd5e0;
+            font-size: 1rem;
+            background: white;
         }
 
         .btn-logout {
@@ -215,7 +233,10 @@
                 flex-direction: column;
                 align-items: stretch;
                 text-align: center;
-                gap: 15px;
+            }
+
+            h1 {
+                margin-right: 0;
             }
 
             .bulk-actions {
@@ -284,13 +305,11 @@
                 text-overflow: ellipsis;
             }
 
-            /* Datum auf Mobile dezenter */
             td[data-label="Datum"] {
                 font-size: 0.85rem;
                 color: #4a5568;
             }
 
-            /* Titel prominenter */
             td[data-label="Titel"] {
                 flex-direction: column;
                 align-items: flex-start;
@@ -463,9 +482,14 @@
 
     <div class="container">
         <div class="header-area">
-            <h1>🚀 Bitcoin Jahr 2026 Manager</h1>
-            <button class="btn btn-logout" id="logout-btn" style="display:none;" onclick="logout()">Logout / PW
-                löschen</button>
+            <h1>🚀 Shorty Manager</h1>
+
+            <div class="project-selector-container">
+                <select id="project-select" onchange="changeProject(this.value)">
+                    <option value="" disabled selected>Projekt wählen...</option>
+                </select>
+                <button class="btn btn-logout" id="logout-btn" style="display:none;" onclick="logout()">Logout</button>
+            </div>
         </div>
 
         <div class="bulk-actions" id="bulk-bar" style="display:none;">
@@ -476,7 +500,7 @@
             <button class="btn btn-cancel" onclick="deselectAll()" style="padding: 8px 12px;">Auswahl aufheben</button>
         </div>
 
-        <div id="content">Daten werden geladen...</div>
+        <div id="content">Bitte wähle ein Projekt aus.</div>
     </div>
 
     <script>
@@ -518,14 +542,81 @@
             }
         }
 
-        async function loadData() {
-            const content = document.getElementById('content');
+        function getProjectId() {
+            const params = new URLSearchParams(window.location.search);
+            return params.get('project');
+        }
+
+        function changeProject(projectId) {
+            if (projectId) {
+                const url = new URL(window.location);
+                url.searchParams.set('project', projectId);
+                window.history.pushState({}, '', url);
+                loadData();
+            }
+        }
+
+        async function init() {
+            // First load projects list to populate dropdown
             try {
                 const response = await fetch('list.php');
                 const json = await response.json();
 
-                // Logout Button anzeigen wenn Passwort gespeichert
-                document.getElementById('logout-btn').style.display = localStorage.getItem('upload_pw_hash') ? 'block' : 'none';
+                if (json.mode === 'project_list') {
+                    const select = document.getElementById('project-select');
+                    select.innerHTML = '<option value="" disabled selected>Projekt wählen...</option>';
+
+                    json.projects.forEach(p => {
+                        const opt = document.createElement('option');
+                        opt.value = p.id;
+                        opt.textContent = p.title;
+                        select.appendChild(opt);
+                    });
+
+                    // Check URL for current project
+                    let currentProject = getProjectId();
+
+                    // If no project in URL, check for default
+                    if (!currentProject && json.default_project) {
+                        currentProject = json.default_project;
+                        // Update URL without reloading
+                        const url = new URL(window.location);
+                        url.searchParams.set('project', currentProject);
+                        window.history.replaceState({}, '', url);
+                    }
+
+                    if (currentProject) {
+                        select.value = currentProject;
+                        loadData(); // Load data if project already in URL or default found
+                    }
+                }
+            } catch (e) {
+                document.getElementById('content').innerHTML = "Fehler beim Laden der Projekte: " + e.message;
+            }
+
+            // Logout Button visibility
+            document.getElementById('logout-btn').style.display = localStorage.getItem('upload_pw_hash') ? 'block' : 'none';
+        }
+
+        async function loadData() {
+            const projectId = getProjectId();
+            if (!projectId) return;
+
+            const content = document.getElementById('content');
+            content.innerHTML = "Daten werden geladen...";
+
+            try {
+                const response = await fetch(`list.php?project=${projectId}`);
+                const json = await response.json();
+
+                if (!json.success) {
+                    content.innerHTML = `<div style="color:red; text-align:center;">${json.error}</div>`;
+                    return;
+                }
+
+                // Update UI Title
+                document.querySelector('h1').innerText = "🚀 " + json.project_title;
+                document.title = json.project_title + " - Shorty";
 
                 const nextPending = [...json.data].reverse().find(item => !item.isUploaded);
                 let scrolled = false;
@@ -658,6 +749,9 @@
             const hash = await getAuthHash();
             if (!hash) return;
 
+            const projectId = getProjectId();
+            if (!projectId) return;
+
             // Bulk Execution one by one
             const overlay = document.getElementById('loading-overlay');
             overlay.style.display = 'flex';
@@ -670,6 +764,8 @@
                     const fd = new FormData();
                     fd.append('video_num', nr);
                     fd.append('password', hash);
+                    fd.append('project', projectId);
+
                     const endpointMap = {
                         'upload': 'upload.php',
                         'refresh': 'refresh.php',
@@ -710,10 +806,13 @@
             };
             document.getElementById('status-text').innerText = `Video #${nr} ${actionText[type]}`;
 
+            const projectId = getProjectId();
+
             try {
                 const fd = new FormData();
                 fd.append('video_num', nr);
                 fd.append('password', hash);
+                fd.append('project', projectId);
 
                 const endpointMap = {
                     'upload': 'upload.php',
@@ -740,7 +839,7 @@
             }
         }
 
-        loadData();
+        init();
     </script>
 </body>
 

@@ -4,13 +4,19 @@ require_once 'config.php';
 /**
  * Kern-Logik für den Video-Upload zu YouTube.
  */
-function uploadToYouTube($videoNum, $isMock = false)
+function uploadToYouTube($videoNum, $config, $isMock = false)
 {
     $client = getClient();
     $service = new Google\Service\Sheets($client);
 
+    $sheetId = $config['sheet_id'];
+    $sheetName = $config['sheet_name'] ?? 'Themen';
+    $folderId = $config['folder_id'];
+    $playlistId = $config['playlist_id'];
+    $startDate = $config['start_date'] ?? '2026-01-01 21:21:00';
+
     // 1. Daten aus Google Sheet holen
-    $response = $service->spreadsheets_values->get(SHEET_ID, SHEET_NAME . '!A2:H420');
+    $response = $service->spreadsheets_values->get($sheetId, $sheetName . '!A2:H420');
     $rows = $response->getValues();
     $metadata = null;
 
@@ -50,7 +56,7 @@ function uploadToYouTube($videoNum, $isMock = false)
     }
 
     // 2. Datum berechnen
-    $publishDate = new DateTime('2026-01-01 21:21:00');
+    $publishDate = new DateTime($startDate);
     $publishDate->modify('+' . ($videoNum - 1) . ' days');
     $publishStr = $publishDate->format(DateTime::RFC3339);
 
@@ -58,7 +64,7 @@ function uploadToYouTube($videoNum, $isMock = false)
     $drive = new Google\Service\Drive($client);
     $fileName = $videoNum . '.mp4';
     $files = $drive->files->listFiles([
-        'q' => "'" . FOLDER_ID . "' in parents and name = '$fileName' and trashed = false",
+        'q' => "'" . $folderId . "' in parents and name = '$fileName' and trashed = false",
         'fields' => 'files(id, name)'
     ]);
 
@@ -109,7 +115,7 @@ function uploadToYouTube($videoNum, $isMock = false)
     // 4.5 Video zur Playlist hinzufügen
     $playlistItem = new Google\Service\YouTube\PlaylistItem();
     $playlistSnippet = new Google\Service\YouTube\PlaylistItemSnippet();
-    $playlistSnippet->setPlaylistId(PLAYLIST_ID);
+    $playlistSnippet->setPlaylistId($playlistId);
     $resourceId = new Google\Service\YouTube\ResourceId();
     $resourceId->setKind('youtube#video');
     $resourceId->setVideoId($videoId);
@@ -122,11 +128,11 @@ function uploadToYouTube($videoNum, $isMock = false)
     $body = new Google\Service\Sheets\ValueRange(['values' => $values]);
     $params = ['valueInputOption' => 'RAW'];
     $rowInSheet = $videoNum + 1;
-    $service->spreadsheets_values->update(SHEET_ID, SHEET_NAME . "!H$rowInSheet", $body, $params);
+    $service->spreadsheets_values->update($sheetId, $sheetName . "!H$rowInSheet", $body, $params);
 
     // 5. Optionaler SRT Upload
     $srtName = $videoNum . '.srt';
-    $srtFiles = $drive->files->listFiles(['q' => "'" . FOLDER_ID . "' in parents and name = '$srtName' and trashed = false"]);
+    $srtFiles = $drive->files->listFiles(['q' => "'" . $folderId . "' in parents and name = '$srtName' and trashed = false"]);
     $srtUploaded = false;
     if (count($srtFiles->getFiles()) > 0) {
         $srtId = $srtFiles->getFiles()[0]->getId();
@@ -167,20 +173,25 @@ if (!defined('IN_NIGHTLY')) {
         if (!isset($_POST['video_num'])) {
             throw new Exception("Keine Video-Nummer übergeben.");
         }
+        if (!isset($_POST['project'])) {
+            throw new Exception("Kein Projekt übergeben.");
+        }
 
-        // Passwort-Prüfung gegen Hash in client_secret.json (unterstützt alt/neu)
-        $secrets = json_decode(file_get_contents(__DIR__ . '/client_secret.json'), true);
-        $c = $secrets['app'] ?? $secrets['app_config'] ?? [];
-        $expectedHash = $c['password'] ?? '';
+        $projectId = $_POST['project'];
+        $config = getProjectConfig($projectId);
+
+        // Passwort-Prüfung - Global
+        $expectedHash = UPLOAD_PASSWORD_HASH;
 
         if (!isset($_POST['password']) || $_POST['password'] !== $expectedHash) {
             throw new Exception("Falsches Passwort. Upload nicht erlaubt.");
         }
 
-        $result = uploadToYouTube($_POST['video_num']);
+        $result = uploadToYouTube($_POST['video_num'], $config);
         echo json_encode($result);
 
     } catch (Exception $e) {
+        http_response_code(400);
         echo json_encode(['success' => false, 'message' => $e->getMessage()]);
     }
 }

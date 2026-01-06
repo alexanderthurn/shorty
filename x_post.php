@@ -77,11 +77,16 @@ if (!function_exists('curl_request')) {
 /**
  * Kern-Logik für den Post auf X.
  */
-function postToX($videoNum, $isMock = false)
+function postToX($videoNum, $config, $isMock = false)
 {
     $client = getClient();
     $service = new Google\Service\Sheets($client);
-    $response = $service->spreadsheets_values->get(SHEET_ID, SHEET_NAME . '!A2:J420');
+
+    $sheetId = $config['sheet_id'];
+    $sheetName = $config['sheet_name'] ?? 'Themen';
+    $folderId = $config['folder_id'];
+
+    $response = $service->spreadsheets_values->get($sheetId, $sheetName . '!A2:J420');
     $rows = $response->getValues();
     $metadata = null;
     $mediaId = null;
@@ -147,7 +152,7 @@ function postToX($videoNum, $isMock = false)
     if ($needsUpload) {
         // 1. Datei von Drive laden
         $drive = new Google\Service\Drive($client);
-        $files = $drive->files->listFiles(['q' => "'" . FOLDER_ID . "' in parents and name = '$videoNum.mp4' and trashed = false"]);
+        $files = $drive->files->listFiles(['q' => "'" . $folderId . "' in parents and name = '$videoNum.mp4' and trashed = false"]);
         if (count($files->getFiles()) == 0)
             throw new Exception("MP4 Datei nicht gefunden.");
         $fileId = $files->getFiles()[0]->getId();
@@ -169,7 +174,7 @@ function postToX($videoNum, $isMock = false)
         $mediaId = $res['body']->media_id_string;
 
         // 3. Media-ID SOFORT im Sheet speichern (Spalte J)
-        $service->spreadsheets_values->update(SHEET_ID, SHEET_NAME . "!J" . ($videoNum + 1), new Google\Service\Sheets\ValueRange(['values' => [[$mediaId]]]), ['valueInputOption' => 'RAW']);
+        $service->spreadsheets_values->update($sheetId, $sheetName . "!J" . ($videoNum + 1), new Google\Service\Sheets\ValueRange(['values' => [[$mediaId]]]), ['valueInputOption' => 'RAW']);
 
         // 4. APPEND
         $handle = fopen($tempFile, 'rb');
@@ -227,8 +232,8 @@ function postToX($videoNum, $isMock = false)
         $tweetId = $res['body']->data->id;
         // Tweet-ID speichern (I) und Media-ID löschen (J)
         $service->spreadsheets_values->update(
-            SHEET_ID,
-            SHEET_NAME . "!I" . ($videoNum + 1) . ":J" . ($videoNum + 1),
+            $sheetId,
+            $sheetName . "!I" . ($videoNum + 1) . ":J" . ($videoNum + 1),
             new Google\Service\Sheets\ValueRange(['values' => [[$tweetId, '']]]),
             ['valueInputOption' => 'RAW']
         );
@@ -244,19 +249,23 @@ if (!defined('IN_NIGHTLY')) {
     try {
         if (!isset($_POST['video_num']))
             throw new Exception("Video-Nummer fehlt.");
+        if (!isset($_POST['project']))
+            throw new Exception("Projekt fehlt.");
 
-        // Passwort-Prüfung gegen Hash in client_secret.json (unterstützt alt/neu)
-        $secrets = json_decode(file_get_contents(__DIR__ . '/client_secret.json'), true);
-        $c = $secrets['app'] ?? $secrets['app_config'] ?? [];
-        $expectedHash = $c['password'] ?? '';
+        $projectId = $_POST['project'];
+        $config = getProjectConfig($projectId);
+
+        // Global Password Check
+        $expectedHash = UPLOAD_PASSWORD_HASH;
 
         if (!isset($_POST['password']) || $_POST['password'] !== $expectedHash)
             throw new Exception("Passwort falsch.");
 
-        $result = postToX($_POST['video_num']);
+        $result = postToX($_POST['video_num'], $config);
         echo json_encode($result);
 
     } catch (Throwable $e) {
+        http_response_code(400);
         echo json_encode(['success' => false, 'message' => $e->getMessage()]);
     }
 }

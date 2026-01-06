@@ -20,11 +20,6 @@ require_once 'x_post.php';
 require_once 'upload.php';
 
 try {
-    if (!defined('NIGHTLY_MODE') || NIGHTLY_MODE === 'OFF') {
-        echo json_encode(['success' => true, 'message' => 'Nightly mode is OFF or not defined.']);
-        exit;
-    }
-
     $now = new DateTime();
     if (isset($_GET['test_date'])) {
         $now = new DateTime($_GET['test_date']);
@@ -39,112 +34,125 @@ try {
         $runType = $argv[2];
     }
 
-    // Use the refactored list.php function to get all data
-    $allEntries = getShortyList();
+    $projects = getProjects();
+    $overallResults = [];
 
-    // Sort entries oldest first for processing
-    usort($allEntries, function ($a, $b) {
-        return $a['nr'] <=> $b['nr'];
-    });
+    foreach ($projects as $projInfo) {
+        $projectId = $projInfo['id'];
+        $config = getProjectConfig($projectId);
 
-    $results = [
-        'youtube' => [],
-        'x' => []
-    ];
+        $nightlyMode = $config['nightly_mode'] ?? 'OFF';
 
-    $isMock = (NIGHTLY_MODE === 'MOCK');
+        $projResult = [
+            'id' => $projectId,
+            'title' => $config['title'] ?? $projectId,
+            'youtube' => [],
+            'x' => [],
+            'status' => 'ACTIVE'
+        ];
 
-    // --- 1. YOUTUBE UPLOADS ---
-    if ((NIGHTLY_YOUTUBE_ACTIVE === true) && ($runType === 'all' || $runType === 'youtube')) {
-        foreach ($allEntries as $entry) {
-            // Check time limit: stop if more than 500 seconds have passed
-            if ((microtime(true) - $startTime) > 500) {
-                $results['youtube'][] = ['status' => 'SKIPPED', 'message' => 'Time limit (500s) reached, skipping remaining YouTube uploads.'];
-                break;
-            }
+        if ($nightlyMode === 'OFF') {
+            $projResult['status'] = 'OFF';
+            $overallResults[$projectId] = $projResult;
+            continue;
+        }
 
-            $nr = $entry['nr'];
-            $isUploaded = $entry['isUploaded'];
-            $hasMp4 = $entry['hasMp4'];
+        $nightlyXActive = $config['nightly_x_active'] ?? false;
+        $nightlyYoutubeActive = $config['nightly_youtube_active'] ?? false;
+        $isMock = ($nightlyMode === 'MOCK');
 
-            // Logic: not uploaded yet and mp4 exists
-            if (!$isUploaded && $hasMp4) {
-                try {
-                    $status = uploadToYouTube($nr, $isMock);
-                    $results['youtube'][] = [
-                        'nr' => $nr,
-                        'status' => 'PROCESSED',
-                        'detail' => $status
-                    ];
-                } catch (Exception $e) {
-                    $results['youtube'][] = [
-                        'nr' => $nr,
-                        'status' => 'ERROR',
-                        'message' => $e->getMessage()
-                    ];
-                    // Abort YouTube uploads if one fails as requested
+        // --- DATA FETCHING ---
+        $allEntries = getShortyList($config);
+
+        // Sort entries oldest first for processing
+        usort($allEntries, function ($a, $b) {
+            return $a['nr'] <=> $b['nr'];
+        });
+
+        // --- 1. YOUTUBE UPLOADS ---
+        if (($nightlyYoutubeActive === true) && ($runType === 'all' || $runType === 'youtube')) {
+            foreach ($allEntries as $entry) {
+                // Check time limit
+                if ((microtime(true) - $startTime) > 500) {
+                    $projResult['youtube'][] = ['status' => 'SKIPPED', 'message' => 'Time limit (500s) reached.'];
                     break;
                 }
-            }
-        }
-    }
 
-    // --- 2. X POSTS (Exactly one oldest) ---
-    if ((NIGHTLY_X_ACTIVE === true) && ($runType === 'all' || $runType === 'x')) {
-        // Filter and sort for entries that should be published
-        $eligibleXEntries = [];
-        foreach ($allEntries as $entry) {
-            $nr = $entry['nr'];
-            $publishDate = $entry['datum_raw'];
-            $tweetId = $entry['xTweetId'];
-            $hasMp4 = $entry['hasMp4'];
+                $nr = $entry['nr'];
+                $isUploaded = $entry['isUploaded'];
+                $hasMp4 = $entry['hasMp4'];
 
-            // Logic: older than simulated "now" (+ 2 min buffer), not yet posted, and mp4 exists
-            $buffer = new DateInterval('PT2M');
-            $simulatedNowWithBuffer = (clone $now)->add($buffer);
-
-            if ($publishDate <= $simulatedNowWithBuffer && empty($tweetId) && $hasMp4) {
-                $eligibleXEntries[] = $entry;
-            }
-        }
-
-        if (!empty($eligibleXEntries)) {
-            // Sort eligible entries by number (oldest first) to pick the single oldest one
-            usort($eligibleXEntries, function ($a, $b) {
-                return $a['nr'] <=> $b['nr'];
-            });
-
-            $oldestEntry = $eligibleXEntries[0];
-            $nr = $oldestEntry['nr'];
-
-            // Check time limit before starting X post
-            if ((microtime(true) - $startTime) < 550) {
-                try {
-                    $status = postToX($nr, $isMock);
-                    $results['x'][] = [
-                        'nr' => $nr,
-                        'status' => 'PROCESSED',
-                        'simulated_now' => $now->format('Y-m-d H:i:s'),
-                        'detail' => $status
-                    ];
-                } catch (Exception $e) {
-                    $results['x'][] = [
-                        'nr' => $nr,
-                        'status' => 'ERROR',
-                        'simulated_now' => $now->format('Y-m-d H:i:s'),
-                        'message' => $e->getMessage()
-                    ];
+                if (!$isUploaded && $hasMp4) {
+                    try {
+                        $status = uploadToYouTube($nr, $config, $isMock);
+                        $projResult['youtube'][] = [
+                            'nr' => $nr,
+                            'status' => 'PROCESSED',
+                            'detail' => $status
+                        ];
+                    } catch (Exception $e) {
+                        $projResult['youtube'][] = [
+                            'nr' => $nr,
+                            'status' => 'ERROR',
+                            'message' => $e->getMessage()
+                        ];
+                        // Abort YouTube uploads if one fails as requested
+                        break;
+                    }
                 }
-            } else {
-                $results['x'][] = ['status' => 'SKIPPED', 'message' => 'Time limit reached before starting X post.'];
             }
         }
+
+        // --- 2. X POSTS (Exactly one oldest) ---
+        if (($nightlyXActive === true) && ($runType === 'all' || $runType === 'x')) {
+            $eligibleXEntries = [];
+            foreach ($allEntries as $entry) {
+                $nr = $entry['nr'];
+                $publishDate = $entry['datum_raw'];
+                $tweetId = $entry['xTweetId'];
+                $hasMp4 = $entry['hasMp4'];
+
+                $buffer = new DateInterval('PT2M');
+                $simulatedNowWithBuffer = (clone $now)->add($buffer);
+
+                if ($publishDate <= $simulatedNowWithBuffer && empty($tweetId) && $hasMp4) {
+                    $eligibleXEntries[] = $entry;
+                }
+            }
+
+            if (!empty($eligibleXEntries)) {
+                // Pick oldest
+                $oldestEntry = $eligibleXEntries[0];
+                $nr = $oldestEntry['nr'];
+
+                if ((microtime(true) - $startTime) < 550) {
+                    try {
+                        $status = postToX($nr, $config, $isMock);
+                        $projResult['x'][] = [
+                            'nr' => $nr,
+                            'status' => 'PROCESSED',
+                            'detail' => $status
+                        ];
+                    } catch (Exception $e) {
+                        $projResult['x'][] = [
+                            'nr' => $nr,
+                            'status' => 'ERROR',
+                            'message' => $e->getMessage()
+                        ];
+                    }
+                } else {
+                    $projResult['x'][] = ['status' => 'SKIPPED', 'message' => 'Time limit reached.'];
+                }
+            }
+        }
+
+        $overallResults[$projectId] = $projResult;
     }
 
     echo json_encode([
         'success' => true,
         'simulated_now' => $now->format('Y-m-d H:i:s'),
-        'results' => $results,
+        'projects' => $overallResults,
         'execution_time' => round(microtime(true) - $startTime, 2) . 's'
     ]);
 
