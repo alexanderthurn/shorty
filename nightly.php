@@ -34,11 +34,22 @@ try {
         $runType = $argv[2];
     }
 
+    $targetProject = $_GET['project'] ?? null;
+    if (php_sapi_name() === 'cli' && isset($argv[3])) {
+        $targetProject = $argv[3];
+    }
+
     $projects = getProjects();
     $overallResults = [];
 
     foreach ($projects as $projInfo) {
         $projectId = $projInfo['id'];
+
+        // Filter by project if specified
+        if ($targetProject && $targetProject !== $projectId) {
+            continue;
+        }
+
         $config = getProjectConfig($projectId);
 
         $nightlyMode = $config['nightly_mode'] ?? 'OFF';
