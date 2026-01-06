@@ -47,7 +47,7 @@ function refreshMetadata($videoNum, $config, $isPreview = false)
     // Config global footer
     $footerText = $config['footer_text'] ?? '';
     if (!empty($footerText)) {
-        $metadata['desc'] .= "\n\n" . $footerText;
+        $metadata['desc'] .= "\n\n----------------------------------\n" . $footerText . "\n----------------------------------";
     }
 
     if ($isPreview) {

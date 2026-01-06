@@ -38,7 +38,7 @@ function uploadToYouTube($videoNum, $config, $isMock = false, $isPreview = false
 
             // 1.5 Footer Text anhängen
             if (!empty($config['footer_text'])) {
-                $metadata['desc'] .= "\n\n" . $config['footer_text'];
+                $metadata['desc'] .= "\n\n----------------------------------\n" . $config['footer_text'] . "\n----------------------------------";
             }
             break;
         }
