@@ -92,7 +92,7 @@ function getProjectConfig($projectId)
     throw new Exception("Project configuration not found for ID: " . $projectId);
 }
 
-function getClient()
+function getClient($requireToken = true)
 {
     $client = new Google\Client();
 
@@ -117,16 +117,42 @@ function getClient()
     $client->setPrompt('select_account consent');
 
     $tokenPath = __DIR__ . '/token.json';
+    $tokenLoaded = false;
+
     if (file_exists($tokenPath)) {
         $accessToken = json_decode(file_get_contents($tokenPath), true);
         $client->setAccessToken($accessToken);
+        $tokenLoaded = true;
     }
 
-    // Refresh Token handling
+    if (!$tokenLoaded) {
+        if ($requireToken) {
+            throw new Exception("GOOGLE TOKEN EXPIRED (Missing). Please visit auth.php to login.");
+        }
+        // If not requiring token (e.g. auth.php), return client as is to allow auth flow
+        return $client;
+    }
+
+    // Refresh Token handling - only if we have a token
     if ($client->isAccessTokenExpired()) {
         if ($client->getRefreshToken()) {
-            $client->fetchAccessTokenWithRefreshToken($client->getRefreshToken());
-            file_put_contents($tokenPath, json_encode($client->getAccessToken()));
+            try {
+                $check = $client->fetchAccessTokenWithRefreshToken($client->getRefreshToken());
+                if (isset($check['error'])) {
+                    throw new Exception("Refresh failed: " . ($check['error_description'] ?? $check['error']));
+                }
+                file_put_contents($tokenPath, json_encode($client->getAccessToken()));
+            } catch (Exception $e) {
+                $msg = $e->getMessage();
+                // Check for common OAuth errors
+                if (strpos($msg, 'invalid_grant') !== false || strpos($msg, 'expired or revoked') !== false) {
+                    throw new Exception("GOOGLE TOKEN EXPIRED/REVOKED. Please delete 'token.json' and visit auth.php to re-login.");
+                }
+                throw $e;
+            }
+        } else {
+            // Token expired and no refresh token
+            throw new Exception("Google Token expired and no Refresh Token found. Please re-login via auth.php.");
         }
     }
     return $client;

@@ -756,7 +756,15 @@
                 const json = await response.json();
 
                 if (!json.success) {
-                    content.innerHTML = `<div style="color:red; text-align:center;">${json.error}</div>`;
+                    if (json.error && json.error.includes("GOOGLE TOKEN EXPIRED")) {
+                        content.innerHTML = `<div style="color:red; text-align:center; padding: 20px;">
+                            <h3>🔑 Authentifizierung erforderlich</h3>
+                            <p>${json.error}</p>
+                            <a href="auth.php" class="btn">Jetzt neu verbinden</a>
+                        </div>`;
+                    } else {
+                        content.innerHTML = `<div style="color:red; text-align:center;">${json.error}</div>`;
+                    }
                     return;
                 }
 

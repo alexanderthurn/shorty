@@ -1,6 +1,6 @@
 <?php
 require_once 'config.php';
-$client = getClient();
+$client = getClient(false);
 if (isset($_GET['code'])) {
     $accessToken = $client->fetchAccessTokenWithAuthCode($_GET['code']);
     file_put_contents('token.json', json_encode($accessToken));
