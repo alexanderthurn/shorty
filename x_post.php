@@ -173,17 +173,25 @@ function postToX($videoNum, $config, $isMock = false, $isPreview = false)
     }
 
     if ($needsUpload) {
-        // 1. Datei von Drive laden
+        // 1. Datei von Drive laden (streaming to avoid memory issues)
         $drive = new Google\Service\Drive($client);
         $files = $drive->files->listFiles(['q' => "'" . $folderId . "' in parents and name = '$videoNum.mp4' and trashed = false"]);
         if (count($files->getFiles()) == 0)
             throw new Exception("MP4 Datei nicht gefunden.");
         $fileId = $files->getFiles()[0]->getId();
-        $videoContent = $drive->files->get($fileId, ['alt' => 'media'])->getBody()->getContents();
+
         $tempFile = __DIR__ . '/temp/x_' . $videoNum . '.mp4';
         if (!is_dir(__DIR__ . '/temp'))
             mkdir(__DIR__ . '/temp', 0777, true);
-        file_put_contents($tempFile, $videoContent);
+
+        // Stream download in chunks to avoid memory exhaustion
+        $response = $drive->files->get($fileId, ['alt' => 'media']);
+        $body = $response->getBody();
+        $handle = fopen($tempFile, 'w');
+        while (!$body->eof()) {
+            fwrite($handle, $body->read(1024 * 1024)); // 1MB chunks
+        }
+        fclose($handle);
 
         // 2. INIT
         $params = ['command' => 'INIT', 'media_type' => 'video/mp4', 'media_category' => 'tweet_video', 'total_bytes' => filesize($tempFile)];
