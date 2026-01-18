@@ -114,27 +114,30 @@ try {
             }
         }
 
-        // --- 2. X POSTS (Exactly one oldest) ---
+        // --- 2. X POSTS (Today's video only - not backlog) ---
         if (($nightlyXActive === true) && ($runType === 'all' || $runType === 'x')) {
-            $eligibleXEntries = [];
+            $todayEntry = null;
+            $todayStr = $now->format('Y-m-d');
+
             foreach ($allEntries as $entry) {
-                $nr = $entry['nr'];
                 $publishDate = $entry['datum_raw'];
-                $tweetId = $entry['xTweetId'];
-                $hasMp4 = $entry['hasMp4'];
+                $entryDateStr = $publishDate->format('Y-m-d');
 
-                $buffer = new DateInterval('PT2M');
-                $simulatedNowWithBuffer = (clone $now)->add($buffer);
+                // Only consider today's video
+                if ($entryDateStr === $todayStr) {
+                    $tweetId = $entry['xTweetId'];
+                    $hasMp4 = $entry['hasMp4'];
 
-                if ($publishDate <= $simulatedNowWithBuffer && empty($tweetId) && $hasMp4) {
-                    $eligibleXEntries[] = $entry;
+                    // Eligible: not posted yet and has MP4
+                    if (empty($tweetId) && $hasMp4) {
+                        $todayEntry = $entry;
+                    }
+                    break; // Found today's entry, stop searching
                 }
             }
 
-            if (!empty($eligibleXEntries)) {
-                // Pick oldest
-                $oldestEntry = $eligibleXEntries[0];
-                $nr = $oldestEntry['nr'];
+            if ($todayEntry) {
+                $nr = $todayEntry['nr'];
 
                 if ((microtime(true) - $startTime) < 550) {
                     try {
@@ -154,6 +157,8 @@ try {
                 } else {
                     $projResult['x'][] = ['status' => 'SKIPPED', 'message' => 'Time limit reached.'];
                 }
+            } else {
+                $projResult['x'][] = ['status' => 'SKIPPED', 'message' => 'No eligible video for today (' . $todayStr . ')'];
             }
         }
 
