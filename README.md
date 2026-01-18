@@ -25,7 +25,7 @@ Shorty is a PHP-based automation tool designed to streamline the process of uplo
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/your-username/shorty.git
+    git clone https://github.com/alexanderthurn/shorty.git
     cd shorty
     ```
 
