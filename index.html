@@ -808,8 +808,8 @@
 
                     html += `<tr class="${rowClass}" ${isNext ? 'id="next-video"' : ''}>
                 <td class="checkbox-col" data-label="Auswahl"><input type="checkbox" class="video-checkbox" value="${item.nr}" onchange="updateBulkBar()"></td>
-                <td data-label="Nr"><strong>#${item.nr}</strong></td>
-                <td data-label="Titel"><a href="${item.sheetLink}" target="_blank" class="sheet-link">${item.titel}</a></td>
+                <td data-label="Nr"><a href="${item.sheetLink}" target="_blank" class="sheet-link"><strong>#${item.nr}</strong></a></td>
+                <td data-label="Titel"><a href="#" onclick="showDetails(${item.nr}); return false;" class="sheet-link">${item.titel}</a></td>
                 <td data-label="Info" class="info-cell">
                     <div>${item.datum}</div>
                     <div style="margin-top:4px;">${mp4Badge} ${srtBadge}</div>
@@ -860,6 +860,55 @@
         function closePasswordModal() {
             document.getElementById('password-modal').style.display = 'none';
             document.getElementById('upload-password').value = '';
+        }
+
+        async function showDetails(nr) {
+            const projectId = getProjectId();
+            if (!projectId) return;
+
+            const overlay = document.getElementById('wide-modal-overlay');
+            const title = document.getElementById('wide-modal-title');
+            const body = document.getElementById('wide-modal-body');
+            const confirmBtn = document.getElementById('wide-modal-confirm');
+
+            title.innerText = `Details #${nr}`;
+            body.innerHTML = '<p>Laden...</p>';
+            confirmBtn.style.display = 'none';
+            overlay.style.display = 'flex';
+
+            try {
+                const res = await fetch(`list.php?project=${projectId}&detaillevel=full&startnr=${nr}&endnr=${nr}`);
+                const json = await res.json();
+
+                if (!json.success || !json.data || json.data.length === 0) {
+                    body.innerHTML = '<p style="color:red;">Fehler: Keine Daten gefunden.</p>';
+                    return;
+                }
+
+                const item = json.data[0];
+                body.innerHTML = `
+                    <div class="preview-item">
+                        <div class="preview-field">
+                            <div class="preview-label">Titel</div>
+                            <div class="preview-val">${item.titel}</div>
+                        </div>
+                        <div class="preview-field">
+                            <div class="preview-label">Key-Info</div>
+                            <div class="preview-val">${item.keyInfo || '(leer)'}</div>
+                        </div>
+                        <div class="preview-field">
+                            <div class="preview-label">Final</div>
+                            <div class="preview-val">${item.final || '(leer)'}</div>
+                        </div>
+                        <div class="preview-field">
+                            <div class="preview-label">Infos</div>
+                            <div class="preview-val">${item.infos || '(leer)'}</div>
+                        </div>
+                    </div>
+                `;
+            } catch (e) {
+                body.innerHTML = `<p style="color:red;">Fehler: ${e.message}</p>`;
+            }
         }
 
         async function getAuthHash() {

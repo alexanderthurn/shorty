@@ -6,8 +6,11 @@ error_reporting(E_ALL);
 
 /**
  * Holt die Liste aller Einträge aus dem Google Sheet und kombiniert sie mit Drive-Daten.
+ * 
+ * @param array $config Project configuration
+ * @param array $options Optional filters: detaillevel, startnr, endnr, startdate, enddate
  */
-function getShortyList($config)
+function getShortyList($config, $options = [])
 {
     $client = getClient();
     $sheets = new Google\Service\Sheets($client);
@@ -18,6 +21,13 @@ function getShortyList($config)
     $sheetId = $config['sheet_id'];
     $folderId = $config['folder_id'];
     $startDate = $config['start_date'] ?? '2026-01-01 21:21:00';
+
+    // Options
+    $detailLevel = $options['detaillevel'] ?? 'basic';
+    $startNr = isset($options['startnr']) ? (int) $options['startnr'] : null;
+    $endNr = isset($options['endnr']) ? (int) $options['endnr'] : null;
+    $filterStartDate = $options['startdate'] ?? null;
+    $filterEndDate = $options['enddate'] ?? null;
 
     // 1. Daten aus Sheet holen
     $range = $sheetName . '!A2:J420';
@@ -52,11 +62,33 @@ function getShortyList($config)
         if (!$nr)
             continue;
 
-        // Datum dynamisch berechnen
-        $pDate = (new DateTime($startDate))->modify('+' . ($nr - 1) . ' days');
-        $sheetRow = $index + 2;
+        $nrInt = (int) $nr;
 
-        $results[] = [
+        // Nr filter
+        if ($startNr !== null && $nrInt < $startNr)
+            continue;
+        if ($endNr !== null && $nrInt > $endNr)
+            continue;
+
+        // Datum dynamisch berechnen
+        $pDate = (new DateTime($startDate))->modify('+' . ($nrInt - 1) . ' days');
+
+        // Date filter
+        if ($filterStartDate !== null) {
+            $filterStart = new DateTime($filterStartDate);
+            if ($pDate < $filterStart)
+                continue;
+        }
+        if ($filterEndDate !== null) {
+            $filterEnd = new DateTime($filterEndDate);
+            $filterEnd->setTime(23, 59, 59);
+            if ($pDate > $filterEnd)
+                continue;
+        }
+
+        $sheetRow = $nrInt + 1; // Row = Nr + 1 (header is row 1)
+
+        $item = [
             'nr' => $nr,
             'titel' => "Tag $nr - " . ($row[2] ?? 'Kein Titel'),
             'datum' => $pDate->format('d.m.Y H:i'),
@@ -68,10 +100,19 @@ function getShortyList($config)
             'youtubeId' => $row[7] ?? null,
             'xTweetId' => $row[8] ?? null,
             'xMediaId' => $row[9] ?? null,
-            'sheetLink' => "https://docs.google.com/spreadsheets/d/" . $sheetId . "/edit#range=A$sheetRow",
+            'sheetLink' => "https://docs.google.com/spreadsheets/d/" . $sheetId . "/edit#gid=0&range=A$sheetRow",
             'mp4Link' => isset($filesFound[$nr]['mp4']) ? "https://drive.google.com/file/d/" . $filesFound[$nr]['mp4']['id'] . "/view" : null,
             'srtLink' => isset($filesFound[$nr]['srt']) ? "https://drive.google.com/file/d/" . $filesFound[$nr]['srt']['id'] . "/view" : null
         ];
+
+        // Extended data for full detail level
+        if ($detailLevel === 'full') {
+            $item['keyInfo'] = $row[3] ?? '';
+            $item['infos'] = $row[4] ?? '';
+            $item['final'] = $row[5] ?? '';
+        }
+
+        $results[] = $item;
     }
 
     usort($results, function ($a, $b) {
@@ -101,7 +142,21 @@ if (!defined('IN_NIGHTLY')) {
 
         // Project specified: configuration load & execute
         $config = getProjectConfig($projectId);
-        $results = getShortyList($config);
+
+        // Build options from query params
+        $options = [];
+        if (isset($_GET['detaillevel']))
+            $options['detaillevel'] = $_GET['detaillevel'];
+        if (isset($_GET['startnr']))
+            $options['startnr'] = $_GET['startnr'];
+        if (isset($_GET['endnr']))
+            $options['endnr'] = $_GET['endnr'];
+        if (isset($_GET['startdate']))
+            $options['startdate'] = $_GET['startdate'];
+        if (isset($_GET['enddate']))
+            $options['enddate'] = $_GET['enddate'];
+
+        $results = getShortyList($config, $options);
 
         // Remove 'datum_raw' for JSON
         foreach ($results as &$item) {
