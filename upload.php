@@ -46,9 +46,16 @@ function uploadToYouTube($videoNum, $config, $isMock = false, $isPreview = false
         if (isset($row[0]) && $row[0] == $videoNum) {
             // Tags extrahieren (Spalte G = Index 6)
             $tagString = $row[6] ?? '';
-            $tags = array_filter(array_map('trim', explode(',', $tagString)));
+            $videoTags = array_filter(array_map('trim', explode(',', $tagString)));
+
+            // Merge with default tags from config
+            $defaultTagString = $config['default_tags'] ?? '';
+            $defaultTags = array_filter(array_map('trim', explode(',', $defaultTagString)));
+
+            // Combine: default tags first, then video-specific tags, remove duplicates
+            $tags = array_unique(array_merge($defaultTags, $videoTags));
             if (empty($tags)) {
-                $tags = ['Bitcoin'];
+                $tags = ['Bitcoin']; // Fallback if no tags at all
             }
 
             $metadata = [

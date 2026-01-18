@@ -101,10 +101,16 @@ function postToX($videoNum, $config, $isMock = false, $isPreview = false)
             $tweetId = $row[8] ?? null;
             $mediaId = $row[9] ?? null;
 
-            // Hashtags generieren
-            $tagList = array_filter(array_map('trim', explode(',', $tagsRaw)));
+            // Hashtags generieren - merge with default tags from config
+            $videoTags = array_filter(array_map('trim', explode(',', $tagsRaw)));
+            $defaultTagString = $config['default_tags'] ?? '';
+            $defaultTags = array_filter(array_map('trim', explode(',', $defaultTagString)));
+
+            // Combine: default tags first, then video-specific tags, remove duplicates
+            $tagList = array_unique(array_merge($defaultTags, $videoTags));
             if (empty($tagList))
-                $tagList = ['Bitcoin'];
+                $tagList = ['Bitcoin']; // Fallback
+
             $hashtags = "";
             foreach ($tagList as $tag)
                 $hashtags .= "#" . str_replace(' ', '', ltrim($tag, '#')) . " ";

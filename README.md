@@ -135,7 +135,8 @@ Configure multiple projects in `client_secret.json`:
       "sheet_id": "...",
       "folder_id": "...",
       "playlist_id": "...",
-      "start_date": "2026-01-01 21:21:00"
+      "start_date": "2026-01-01 21:21:00",
+      "default_tags": "Bitcoin, Crypto"
     },
     {
       "id": "project2",
