@@ -1,4 +1,26 @@
 <?php
+// Enable error display for debugging
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
+// Global error handler for fatal errors
+register_shutdown_function(function () {
+    $error = error_get_last();
+    if ($error && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
+        if (!headers_sent()) {
+            header('Content-Type: application/json; charset=utf-8');
+            http_response_code(500);
+        }
+        echo json_encode([
+            'success' => false,
+            'message' => 'Fatal Error: ' . $error['message'],
+            'file' => basename($error['file']),
+            'line' => $error['line']
+        ]);
+    }
+});
+
 require_once 'config.php';
 
 /**
@@ -100,15 +122,25 @@ function uploadToYouTube($videoNum, $config, $isMock = false, $isPreview = false
         throw new Exception("Datei $fileName nicht gefunden (Upload Check).");
     }
 
-    $content = $drive->files->get($fileId, ['alt' => 'media']);
+    // Download from Drive in chunks to temp file (memory-efficient)
     $tempDir = __DIR__ . '/temp';
     if (!is_dir($tempDir)) {
         mkdir($tempDir, 0777, true);
     }
     $tempFile = $tempDir . '/temp_' . $videoNum . '.mp4';
-    file_put_contents($tempFile, $content->getBody()->getContents());
 
-    // 4. YouTube Upload
+    // Use streaming download to avoid memory issues
+    $response = $drive->files->get($fileId, ['alt' => 'media']);
+    $body = $response->getBody();
+    $handle = fopen($tempFile, 'w');
+    while (!$body->eof()) {
+        fwrite($handle, $body->read(1024 * 1024)); // 1MB chunks
+    }
+    fclose($handle);
+
+    $fileSize = filesize($tempFile);
+
+    // 4. YouTube Upload - use resumable upload for large files
     $youtube = new Google\Service\YouTube($client);
     $video = new Google\Service\YouTube\Video();
 
@@ -129,11 +161,34 @@ function uploadToYouTube($videoNum, $config, $isMock = false, $isPreview = false
     $recordingDetails->setRecordingDate($publishStr);
     $video->setRecordingDetails($recordingDetails);
 
-    $result = $youtube->videos->insert('snippet,status,recordingDetails', $video, [
-        'data' => file_get_contents($tempFile),
-        'mimeType' => 'video/mp4',
-        'uploadType' => 'multipart'
-    ]);
+    // Use resumable upload with chunks
+    $client->setDefer(true);
+    $insertRequest = $youtube->videos->insert('snippet,status,recordingDetails', $video);
+
+    $chunkSize = 8 * 1024 * 1024; // 8MB chunks
+    $media = new Google\Http\MediaFileUpload(
+        $client,
+        $insertRequest,
+        'video/mp4',
+        null,
+        true, // resumable
+        $chunkSize
+    );
+    $media->setFileSize($fileSize);
+
+    // Upload in chunks
+    $uploadHandle = fopen($tempFile, 'rb');
+    $result = false;
+    while (!$result && !feof($uploadHandle)) {
+        $chunk = fread($uploadHandle, $chunkSize);
+        $result = $media->nextChunk($chunk);
+    }
+    fclose($uploadHandle);
+    $client->setDefer(false);
+
+    if (!$result) {
+        throw new Exception("YouTube Upload fehlgeschlagen - keine Antwort erhalten.");
+    }
 
     $videoId = $result->getId();
 
@@ -216,8 +271,31 @@ if (!defined('IN_NIGHTLY')) {
         $result = uploadToYouTube($_POST['video_num'], $config, false, $isPreview);
         echo json_encode($result);
 
-    } catch (Exception $e) {
+    } catch (Google\Service\Exception $e) {
+        // Google API specific errors - extract details
         http_response_code(400);
-        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        $errors = $e->getErrors();
+        $details = [];
+        foreach ($errors as $err) {
+            $details[] = ($err['reason'] ?? '') . ': ' . ($err['message'] ?? '');
+        }
+        echo json_encode([
+            'success' => false,
+            'message' => 'Google API Error: ' . $e->getMessage(),
+            'details' => $details,
+            'code' => $e->getCode()
+        ]);
+    } catch (Throwable $e) {
+        // Catch all other errors including PHP errors
+        http_response_code(400);
+        echo json_encode([
+            'success' => false,
+            'message' => $e->getMessage(),
+            'file' => basename($e->getFile()),
+            'line' => $e->getLine(),
+            'trace' => array_slice(array_map(function ($t) {
+                return ($t['file'] ?? '?') . ':' . ($t['line'] ?? '?') . ' ' . ($t['function'] ?? '');
+            }, $e->getTrace()), 0, 5)
+        ]);
     }
 }

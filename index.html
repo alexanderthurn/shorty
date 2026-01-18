@@ -1102,12 +1102,22 @@
                     const data = await res.json();
 
                     if (!data.success) {
-                        showModal("Abbruch", `Fehler bei Video #${nr}: ` + data.message);
+                        let errorMsg = `Fehler bei Video #${nr}: ${data.message}`;
+                        if (data.details && data.details.length > 0) {
+                            errorMsg += '<br><br><strong>Details:</strong><br>' + data.details.join('<br>');
+                        }
+                        if (data.file && data.line) {
+                            errorMsg += `<br><br><em>${data.file}:${data.line}</em>`;
+                        }
+                        if (data.trace && data.trace.length > 0) {
+                            errorMsg += '<br><br><strong>Trace:</strong><br><small>' + data.trace.join('<br>') + '</small>';
+                        }
+                        showModal("Abbruch", errorMsg);
                         hasError = true;
                         break;
                     }
                 } catch (e) {
-                    showModal("Netzwerkfehler", `Abbruch bei Video #${nr}`);
+                    showModal("Netzwerkfehler", `Abbruch bei Video #${nr}: ${e.message}`);
                     hasError = true;
                     break;
                 }
