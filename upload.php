@@ -165,6 +165,9 @@ function uploadToYouTube($videoNum, $config, $isMock = false, $isPreview = false
     }
 
     if ($isPreview) {
+        // Format publish date for display
+        $publishDateDisplay = $publishDate->format('d.m.Y H:i');
+        
         return [
             'success' => true,
             'preview' => true,
@@ -172,7 +175,15 @@ function uploadToYouTube($videoNum, $config, $isMock = false, $isPreview = false
             'desc' => $metadata['desc'],
             'tags' => $metadata['tags'],
             'driveLink' => $webViewLink,
-            'videoNum' => $videoNum
+            'videoNum' => $videoNum,
+            'category' => '27', // Education (Bildung)
+            'categoryName' => 'Bildung',
+            'language' => 'de',
+            'languageName' => 'Deutsch',
+            'privacyStatus' => 'private',
+            'privacyStatusName' => 'Privat',
+            'publishDate' => $publishStr,
+            'publishDateDisplay' => $publishDateDisplay
         ];
     }
 
@@ -229,6 +240,7 @@ function uploadToYouTube($videoNum, $config, $isMock = false, $isPreview = false
         throw new Exception($errorMsg);
     }
     
+    $snippet->setCategoryId('27'); // 27 = Education (Bildung)
     $snippet->setDefaultLanguage('de');
     $snippet->setDefaultAudioLanguage('de');
     $video->setSnippet($snippet);

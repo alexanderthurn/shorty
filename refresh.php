@@ -124,6 +124,7 @@ function refreshMetadata($videoNum, $config, $isPreview = false)
     $snippet->setTitle($metadata['title']);
     $snippet->setDescription($finalDesc);
     $snippet->setTags($metadata['tags']);
+    $snippet->setCategoryId('27'); // 27 = Education (Bildung)
     $snippet->setDefaultLanguage('de');
     $snippet->setDefaultAudioLanguage('de');
     $video->setSnippet($snippet);
@@ -160,6 +161,39 @@ function refreshMetadata($videoNum, $config, $isPreview = false)
     // So we must fetch the video even in preview mode nicely.
 
     if ($isPreview) {
+        // Get current video status for preview
+        $currentStatus = $video->getStatus();
+        $currentSnippet = $video->getSnippet();
+        $currentCategoryId = $currentSnippet->getCategoryId();
+        
+        // Format publish date for display
+        $publishDateDisplay = $publishDate->format('d.m.Y H:i');
+        $publishAt = null;
+        if ($publishDate > $now) {
+            $publishAt = $publishStr;
+        } else {
+            // If date is in past, show current status
+            $publishAt = $currentStatus->getPublishAt();
+        }
+        
+        // Category mapping
+        $categoryNames = [
+            '27' => 'Bildung',
+            '10' => 'Musik',
+            '24' => 'Entertainment',
+            '22' => 'People & Blogs',
+            '25' => 'News & Politics',
+            '26' => 'Howto & Style',
+            '28' => 'Science & Technology'
+        ];
+        
+        // Privacy status mapping
+        $privacyStatusNames = [
+            'private' => 'Privat',
+            'unlisted' => 'Nicht gelistet',
+            'public' => 'Öffentlich'
+        ];
+        
         return [
             'success' => true,
             'preview' => true,
@@ -168,7 +202,17 @@ function refreshMetadata($videoNum, $config, $isPreview = false)
             'tags' => $metadata['tags'],
             'driveLink' => $videoId ? "https://youtu.be/$videoId" : null,
             'videoNum' => $videoNum,
-            'isRefresh' => true
+            'isRefresh' => true,
+            'category' => '27', // Will be set to Education
+            'categoryName' => 'Bildung',
+            'currentCategory' => $currentCategoryId,
+            'currentCategoryName' => $categoryNames[$currentCategoryId] ?? 'Unbekannt',
+            'language' => 'de',
+            'languageName' => 'Deutsch',
+            'privacyStatus' => $currentStatus->getPrivacyStatus() ?? 'private',
+            'privacyStatusName' => $privacyStatusNames[$currentStatus->getPrivacyStatus() ?? 'private'] ?? 'Unbekannt',
+            'publishDate' => $publishAt,
+            'publishDateDisplay' => $publishAt ? (new DateTime($publishAt))->format('d.m.Y H:i') : 'Nicht geplant'
         ];
     }
 

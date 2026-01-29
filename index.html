@@ -501,6 +501,33 @@
             padding: 8px;
             border: 1px solid #edf2f7;
             border-radius: 4px;
+            margin-top: 4px;
+            word-break: break-word;
+        }
+        
+        .preview-metadata {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid #e2e8f0;
+        }
+        
+        .preview-metadata .preview-field {
+            margin-bottom: 0;
+        }
+        
+        .preview-metadata .preview-val {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 0.95rem;
+        }
+        
+        @media (max-width: 768px) {
+            .preview-metadata {
+                grid-template-columns: 1fr;
+            }
+        }
         }
 
         /* Tweet Styling */
@@ -1037,11 +1064,36 @@
                                 html += `<div class="preview-field"><div class="preview-label">Titel</div><div class="preview-val">${data.title}</div></div>`;
                             }
                             if (data.desc) {
-                                html += `<div class="preview-field"><div class="preview-label">Beschreibung</div><div class="preview-val">${data.desc}</div></div>`;
+                                html += `<div class="preview-field"><div class="preview-label">Beschreibung</div><div class="preview-val" style="white-space: pre-wrap; max-height: 200px; overflow-y: auto;">${data.desc}</div></div>`;
                             }
                             if (data.tags) {
                                 html += `<div class="preview-field"><div class="preview-label">Tags</div><div class="preview-val">${Array.isArray(data.tags) ? data.tags.join(', ') : data.tags}</div></div>`;
                             }
+                            
+                            // New metadata fields in a grid layout
+                            const hasMetadata = data.categoryName || data.languageName || data.privacyStatusName || data.publishDateDisplay;
+                            if (hasMetadata) {
+                                html += `<div class="preview-metadata">`;
+                                
+                                if (data.categoryName) {
+                                    const categoryInfo = data.isRefresh && data.currentCategoryName ? 
+                                        `${data.categoryName} <span style="color: #718096; font-size: 0.85em;">(aktuell: ${data.currentCategoryName})</span>` : 
+                                        data.categoryName;
+                                    html += `<div class="preview-field"><div class="preview-label">Kategorie</div><div class="preview-val">${categoryInfo}</div></div>`;
+                                }
+                                if (data.languageName) {
+                                    html += `<div class="preview-field"><div class="preview-label">Sprache</div><div class="preview-val">${data.languageName}</div></div>`;
+                                }
+                                if (data.privacyStatusName) {
+                                    html += `<div class="preview-field"><div class="preview-label">Sichtbarkeit</div><div class="preview-val">${data.privacyStatusName}</div></div>`;
+                                }
+                                if (data.publishDateDisplay) {
+                                    html += `<div class="preview-field"><div class="preview-label">Veröffentlichung</div><div class="preview-val">${data.publishDateDisplay}</div></div>`;
+                                }
+                                
+                                html += `</div>`;
+                            }
+                            
                             html += `</div>`;
                         }
 
