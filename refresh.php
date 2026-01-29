@@ -27,6 +27,17 @@ function refreshMetadata($videoNum, $config, $isPreview = false)
 
             $tagString = $row[6] ?? '';
             $tags = array_filter(array_map('trim', explode(',', $tagString)));
+            
+            // Ensure all tags are strings and filter out empty/null values
+            $tags = array_filter(array_map(function($tag) {
+                return is_string($tag) ? trim($tag) : (string)$tag;
+            }, $tags), function($tag) {
+                return !empty($tag) && is_string($tag);
+            });
+            
+            // Re-index array to ensure it's a proper sequential array (not associative)
+            $tags = array_values($tags);
+            
             if (empty($tags))
                 $tags = ['Bitcoin'];
 

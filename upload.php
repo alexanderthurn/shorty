@@ -54,15 +54,66 @@ function uploadToYouTube($videoNum, $config, $isMock = false, $isPreview = false
 
             // Combine: default tags first, then video-specific tags, remove duplicates
             $tags = array_unique(array_merge($defaultTags, $videoTags));
+            
+            // Validate and clean tags
+            $validatedTags = [];
+            $invalidTags = [];
+            
+            foreach ($tags as $tag) {
+                // Convert to string if not already
+                if (!is_string($tag) && !is_numeric($tag)) {
+                    $invalidTags[] = ['value' => $tag, 'type' => gettype($tag), 'reason' => 'Not a string or number'];
+                    continue;
+                }
+                
+                $tagStr = trim((string)$tag);
+                
+                // Check if empty after trimming
+                if (empty($tagStr)) {
+                    continue;
+                }
+                
+                // YouTube tag validation: max 30 characters per tag
+                if (mb_strlen($tagStr) > 30) {
+                    $invalidTags[] = ['value' => $tagStr, 'reason' => 'Tag exceeds 30 characters'];
+                    continue;
+                }
+                
+                $validatedTags[] = $tagStr;
+            }
+            
+            // Throw error if invalid tags found
+            if (!empty($invalidTags)) {
+                $errorMsg = "Invalid tags found for video #$videoNum:\n";
+                $errorMsg .= "Raw tag string from sheet: " . json_encode($tagString) . "\n";
+                $errorMsg .= "Default tags from config: " . json_encode($defaultTagString) . "\n";
+                $errorMsg .= "Invalid tags: " . json_encode($invalidTags, JSON_PRETTY_PRINT) . "\n";
+                $errorMsg .= "Valid tags that would be sent: " . json_encode($validatedTags);
+                throw new Exception($errorMsg);
+            }
+            
+            // Re-index array to ensure it's a proper sequential array (not associative)
+            $tags = array_values($validatedTags);
+            
             if (empty($tags)) {
                 $tags = ['Bitcoin']; // Fallback if no tags at all
             }
+            
+            // Log tags being sent (for debugging)
+            $tagsDebug = [
+                'raw_tag_string' => $tagString,
+                'default_tag_string' => $defaultTagString,
+                'final_tags' => $tags,
+                'tags_count' => count($tags),
+                'tags_json' => json_encode($tags)
+            ];
 
             $metadata = [
                 'title' => "Tag $videoNum - " . ($row[2] ?? 'Bitcoin Short #' . $videoNum),
                 'desc' => $row[3] ?? '', // Spalte D = Index 3
                 'tags' => $tags,
-                'isUploaded' => !empty($row[7]) // Spalte H = Index 7
+                'isUploaded' => !empty($row[7]), // Spalte H = Index 7
+                '_tags_debug' => $tagsDebug // Debug info for error reporting
             ];
 
             // 1.5 Footer Text anhängen
@@ -154,7 +205,30 @@ function uploadToYouTube($videoNum, $config, $isMock = false, $isPreview = false
     $snippet = new Google\Service\YouTube\VideoSnippet();
     $snippet->setTitle($metadata['title']);
     $snippet->setDescription($metadata['desc']);
-    $snippet->setTags($metadata['tags']);
+    
+    // Validate tags before setting (double-check)
+    $tagsToSet = $metadata['tags'];
+    if (!is_array($tagsToSet)) {
+        $debugInfo = $metadata['_tags_debug'] ?? [];
+        throw new Exception("Tags must be an array. Got: " . gettype($tagsToSet) . "\nDebug info: " . json_encode($debugInfo, JSON_PRETTY_PRINT));
+    }
+    
+    // Log what we're sending (for debugging)
+    $tagsDebugInfo = $metadata['_tags_debug'] ?? [];
+    $tagsDebugInfo['tags_being_sent'] = $tagsToSet;
+    $tagsDebugInfo['tags_php_type'] = gettype($tagsToSet);
+    $tagsDebugInfo['tags_is_associative'] = array_keys($tagsToSet) !== range(0, count($tagsToSet) - 1);
+    
+    try {
+        $snippet->setTags($tagsToSet);
+    } catch (Exception $e) {
+        // If setTags itself fails, include debug info
+        $errorMsg = "Failed to set tags on YouTube snippet.\n";
+        $errorMsg .= "Error: " . $e->getMessage() . "\n";
+        $errorMsg .= "Tags debug info: " . json_encode($tagsDebugInfo, JSON_PRETTY_PRINT);
+        throw new Exception($errorMsg);
+    }
+    
     $snippet->setDefaultLanguage('de');
     $snippet->setDefaultAudioLanguage('de');
     $video->setSnippet($snippet);
@@ -169,32 +243,53 @@ function uploadToYouTube($videoNum, $config, $isMock = false, $isPreview = false
     $video->setRecordingDetails($recordingDetails);
 
     // Use resumable upload with chunks
-    $client->setDefer(true);
-    $insertRequest = $youtube->videos->insert('snippet,status,recordingDetails', $video);
+    try {
+        $client->setDefer(true);
+        $insertRequest = $youtube->videos->insert('snippet,status,recordingDetails', $video);
 
-    $chunkSize = 8 * 1024 * 1024; // 8MB chunks
-    $media = new Google\Http\MediaFileUpload(
-        $client,
-        $insertRequest,
-        'video/mp4',
-        null,
-        true, // resumable
-        $chunkSize
-    );
-    $media->setFileSize($fileSize);
+        $chunkSize = 8 * 1024 * 1024; // 8MB chunks
+        $media = new Google\Http\MediaFileUpload(
+            $client,
+            $insertRequest,
+            'video/mp4',
+            null,
+            true, // resumable
+            $chunkSize
+        );
+        $media->setFileSize($fileSize);
 
-    // Upload in chunks
-    $uploadHandle = fopen($tempFile, 'rb');
-    $result = false;
-    while (!$result && !feof($uploadHandle)) {
-        $chunk = fread($uploadHandle, $chunkSize);
-        $result = $media->nextChunk($chunk);
-    }
-    fclose($uploadHandle);
-    $client->setDefer(false);
+        // Upload in chunks
+        $uploadHandle = fopen($tempFile, 'rb');
+        $result = false;
+        while (!$result && !feof($uploadHandle)) {
+            $chunk = fread($uploadHandle, $chunkSize);
+            $result = $media->nextChunk($chunk);
+        }
+        fclose($uploadHandle);
+        $client->setDefer(false);
 
-    if (!$result) {
-        throw new Exception("YouTube Upload fehlgeschlagen - keine Antwort erhalten.");
+        if (!$result) {
+            throw new Exception("YouTube Upload fehlgeschlagen - keine Antwort erhalten.");
+        }
+    } catch (Google\Service\Exception $e) {
+        // Enhance Google API errors with tag debug information
+        $tagsDebugInfo = $metadata['_tags_debug'] ?? [];
+        $errorMsg = "YouTube API Error for video #$videoNum:\n";
+        $errorMsg .= $e->getMessage() . "\n\n";
+        $errorMsg .= "Tags Debug Information:\n";
+        $errorMsg .= json_encode($tagsDebugInfo, JSON_PRETTY_PRINT) . "\n\n";
+        $errorMsg .= "Tags that were attempted: " . json_encode($metadata['tags'], JSON_PRETTY_PRINT) . "\n";
+        
+        // Include original error details
+        $errors = $e->getErrors();
+        if (!empty($errors)) {
+            $errorMsg .= "\nAPI Error Details:\n";
+            foreach ($errors as $err) {
+                $errorMsg .= "- " . ($err['reason'] ?? '') . ': ' . ($err['message'] ?? '') . "\n";
+            }
+        }
+        
+        throw new Exception($errorMsg);
     }
 
     $videoId = $result->getId();
