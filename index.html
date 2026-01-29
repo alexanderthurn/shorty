@@ -1071,7 +1071,7 @@
                             }
                             
                             // New metadata fields in a grid layout
-                            const hasMetadata = data.categoryName || data.languageName || data.privacyStatusName || data.publishDateDisplay;
+                            const hasMetadata = data.categoryName || data.languageName || data.privacyStatusName || data.publishDateDisplay || data.containsSyntheticMediaName;
                             if (hasMetadata) {
                                 html += `<div class="preview-metadata">`;
                                 
@@ -1089,6 +1089,9 @@
                                 }
                                 if (data.publishDateDisplay) {
                                     html += `<div class="preview-field"><div class="preview-label">Veröffentlichung</div><div class="preview-val">${data.publishDateDisplay}</div></div>`;
+                                }
+                                if (data.containsSyntheticMediaName !== undefined) {
+                                    html += `<div class="preview-field"><div class="preview-label">Veränderte Inhalte</div><div class="preview-val">${data.containsSyntheticMediaName}</div></div>`;
                                 }
                                 
                                 html += `</div>`;

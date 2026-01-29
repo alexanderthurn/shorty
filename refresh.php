@@ -145,6 +145,9 @@ function refreshMetadata($videoNum, $config, $isPreview = false)
         // Wir lassen PublishAt hier weg, um den Fehler zu vermeiden.
         // Optional: $status->setPrivacyStatus('public'); falls gewünscht, aber Refresh sollte primär Metadaten fixen.
     }
+    
+    // Set synthetic media disclosure to false (Nein - keine veränderten/synthetischen Inhalte)
+    $status->setContainsSyntheticMedia(false);
 
     $video->setStatus($status);
 
@@ -212,7 +215,9 @@ function refreshMetadata($videoNum, $config, $isPreview = false)
             'privacyStatus' => $currentStatus->getPrivacyStatus() ?? 'private',
             'privacyStatusName' => $privacyStatusNames[$currentStatus->getPrivacyStatus() ?? 'private'] ?? 'Unbekannt',
             'publishDate' => $publishAt,
-            'publishDateDisplay' => $publishAt ? (new DateTime($publishAt))->format('d.m.Y H:i') : 'Nicht geplant'
+            'publishDateDisplay' => $publishAt ? (new DateTime($publishAt))->format('d.m.Y H:i') : 'Nicht geplant',
+            'containsSyntheticMedia' => false,
+            'containsSyntheticMediaName' => 'Nein'
         ];
     }
 

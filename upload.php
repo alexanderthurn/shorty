@@ -183,7 +183,9 @@ function uploadToYouTube($videoNum, $config, $isMock = false, $isPreview = false
             'privacyStatus' => 'private',
             'privacyStatusName' => 'Privat',
             'publishDate' => $publishStr,
-            'publishDateDisplay' => $publishDateDisplay
+            'publishDateDisplay' => $publishDateDisplay,
+            'containsSyntheticMedia' => false,
+            'containsSyntheticMediaName' => 'Nein'
         ];
     }
 
@@ -248,6 +250,7 @@ function uploadToYouTube($videoNum, $config, $isMock = false, $isPreview = false
     $status = new Google\Service\YouTube\VideoStatus();
     $status->setPrivacyStatus('private');
     $status->setPublishAt($publishStr);
+    $status->setContainsSyntheticMedia(false); // Nein - keine veränderten/synthetischen Inhalte
     $video->setStatus($status);
 
     $recordingDetails = new Google\Service\YouTube\VideoRecordingDetails();
