@@ -228,14 +228,14 @@
             background: transparent;
             color: #fff;
             font-weight: bold;
-            font-size: 1rem;
+            font-size: 0.9rem;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: background 0.2s;
+            transition: background 0.2s, color 0.2s;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 0.5px;
             touch-action: manipulation;
         }
 
@@ -243,12 +243,17 @@
             background: #222;
         }
 
-        .nav-btn:first-child {
+        .nav-btn:not(:last-child) {
             border-right: 1px solid #333;
         }
 
-        .nav-btn i {
-            margin: 0 10px;
+        #btn-gemini {
+            color: var(--text-dim);
+            transition: color 0.3s;
+        }
+
+        #btn-gemini.highlight {
+            color: #4fd1c5;
         }
     </style>
 </head>
@@ -280,13 +285,13 @@
     <div class="debug" id="debug"></div>
 
     <nav class="nav-bar">
-        <button class="nav-btn" id="btn-prev" onclick="navigate(-1)">
+        <button class="nav-btn" onclick="navigate(-1)">
             &laquo; Prev
         </button>
-        <button class="nav-btn" id="btn-play" onclick="togglePlay()">
-            Play 🔊
+        <button class="nav-btn" id="btn-gemini" onclick="askGemini()">
+            Gemini ✨
         </button>
-        <button class="nav-btn" id="btn-next" onclick="navigate(1)">
+        <button class="nav-btn" onclick="navigate(1)">
             Next &raquo;
         </button>
     </nav>
@@ -297,16 +302,13 @@
         let projectId = 'default';
         let isLoading = false;
         let isFullMode = false;
-        let isPlaying = false;
-        let synth = window.speechSynthesis;
-        let currentUtterance = null;
 
-        const container = document.getElementById('container');
         const cardMain = document.getElementById('card-main');
         const debug = document.getElementById('debug');
         const keyInfoEl = document.getElementById('key-info');
         const finalTextEl = document.getElementById('final-text');
         const infosEl = document.getElementById('infos');
+        const geminiBtn = document.getElementById('btn-gemini');
 
         async function init() {
             try {
@@ -344,7 +346,6 @@
 
         function findTodayIndex() {
             if (items.length === 0) return;
-
             const urlParams = new URLSearchParams(window.location.search);
             const targetNr = urlParams.get('nr');
             if (targetNr) {
@@ -424,7 +425,6 @@
                 keyInfoEl.style.display = 'none';
             }
 
-            // Full Mode logic
             if (isFullMode && item.final && item.final.trim()) {
                 finalTextEl.textContent = item.final;
                 finalTextEl.style.display = 'block';
@@ -444,59 +444,56 @@
             renderCurrent();
         }
 
-        function stopSpeaking() {
-            if (synth.speaking) {
-                synth.cancel();
-            }
-            isPlaying = false;
-            updatePlayButton();
-        }
-
-        function togglePlay() {
-            if (isPlaying) {
-                stopSpeaking();
-            } else {
-                startSpeaking();
-            }
-        }
-
-        function startSpeaking() {
-            stopSpeaking();
-            const textToRead = infosEl.textContent;
-            if (!textToRead) return;
-
-            currentUtterance = new SpeechSynthesisUtterance(textToRead);
-            currentUtterance.lang = 'de-DE';
-            currentUtterance.onend = () => {
-                isPlaying = false;
-                updatePlayButton();
-            };
-            currentUtterance.onerror = () => {
-                isPlaying = false;
-                updatePlayButton();
-            };
-
-            isPlaying = true;
-            updatePlayButton();
-            synth.speak(currentUtterance);
-        }
-
-        function updatePlayButton() {
-            const btn = document.getElementById('btn-play');
-            btn.innerHTML = isPlaying ? 'Stop ⏹' : 'Play 🔊';
-            btn.style.color = isPlaying ? '#e53e3e' : '#fff';
-        }
-
         keyInfoEl.addEventListener('click', toggleFullMode);
 
+        function askGemini() {
+            const selectedText = window.getSelection().toString().trim();
+            const textToQuery = selectedText || "";
+
+            if (!textToQuery) {
+                alert("Bitte erst einen Textabschnitt markieren.");
+                return;
+            }
+
+            const prompt = `ich verstehe nicht: ${textToQuery}`;
+            const url = `https://gemini.google.com/app?q=${encodeURIComponent(prompt)}`;
+
+            // Copy to clipboard fallback
+            try {
+                const type = "text/plain";
+                const blob = new Blob([prompt], { type });
+                const data = [new ClipboardItem({ [type]: blob })];
+                navigator.clipboard.write(data);
+            } catch (e) {
+                // Fallback for older browsers
+                const textArea = document.createElement("textarea");
+                textArea.value = prompt;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+            }
+
+            // Open app/web
+            window.location.href = url;
+            window.getSelection().removeAllRanges();
+        }
+
+        function updateGeminiHighlight() {
+            const sel = window.getSelection().toString().trim();
+            if (sel.length > 0) {
+                geminiBtn.classList.add('highlight');
+            } else {
+                geminiBtn.classList.remove('highlight');
+            }
+        }
+
+        document.addEventListener('selectionchange', updateGeminiHighlight);
+
         function navigate(dir, step = 1) {
-            stopSpeaking();
-            // dir: 1 for next day (Higher NR, lower index), -1 for prev day (Lower NR, higher index)
-            // step navigation
             let delta = dir * step;
             let newIndex = currentIndex - delta;
 
-            // Boundary checks
             if (newIndex < 0) newIndex = 0;
             if (newIndex >= items.length) newIndex = items.length - 1;
 
@@ -519,18 +516,11 @@
             setTimeout(() => document.getElementById('loading').style.display = 'none', 300);
         }
 
-        // Keyboard support
         document.addEventListener('keydown', e => {
             const key = e.key.toLowerCase();
-
-            // 1 step (Next)
             if (key === 'arrowright' || key === 'd') navigate(1, 1);
-            // 1 step (Prev)
             if (key === 'arrowleft' || key === 'a') navigate(-1, 1);
-
-            // 10 steps (Next)
             if (key === 'arrowup' || key === 'w') navigate(1, 10);
-            // 10 steps (Prev)
             if (key === 'arrowdown' || key === 's') navigate(-1, 10);
         });
 
