@@ -16,6 +16,7 @@
             --accent: #3498db;
             --safe-top: env(safe-area-inset-top, 0px);
             --safe-bottom: env(safe-area-inset-bottom, 0px);
+            --nav-height: 60px;
         }
 
         * {
@@ -111,7 +112,7 @@
             overflow-y: auto;
             background-color: var(--bg);
             transition: opacity 0.2s, transform 0.2s;
-            padding-bottom: 80px;
+            padding-bottom: calc(var(--nav-height) + 20px);
             -webkit-overflow-scrolling: touch;
         }
 
@@ -175,12 +176,54 @@
 
         .debug {
             position: fixed;
-            bottom: 5px;
+            bottom: calc(var(--nav-height) + 5px);
             right: 5px;
             font-size: 10px;
             color: #444;
             pointer-events: none;
             z-index: 100;
+        }
+
+        /* Bottom Nav Bar */
+        .nav-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: var(--nav-height);
+            background: #111;
+            display: flex;
+            border-top: 1px solid #333;
+            z-index: 200;
+            padding-bottom: var(--safe-bottom);
+        }
+
+        .nav-btn {
+            flex: 1;
+            border: none;
+            background: transparent;
+            color: #fff;
+            font-weight: bold;
+            font-size: 1rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .nav-btn:active {
+            background: #222;
+        }
+
+        .nav-btn:first-child {
+            border-right: 1px solid #333;
+        }
+
+        .nav-btn i {
+            margin: 0 10px;
         }
     </style>
 </head>
@@ -207,7 +250,17 @@
             </div>
         </div>
     </div>
+
     <div class="debug" id="debug"></div>
+
+    <nav class="nav-bar">
+        <button class="nav-btn" id="btn-prev" onclick="navigate(-1)">
+            &laquo; Prev
+        </button>
+        <button class="nav-btn" id="btn-next" onclick="navigate(1)">
+            Next &raquo;
+        </button>
+    </nav>
 
     <script>
         let items = [];
@@ -215,7 +268,6 @@
         let projectId = 'default';
         let isLoading = false;
 
-        const container = document.getElementById('container');
         const cardMain = document.getElementById('card-main');
         const debug = document.getElementById('debug');
 
@@ -256,7 +308,6 @@
         function findTodayIndex() {
             if (items.length === 0) return;
 
-            // 1. Check URL for specific NR
             const urlParams = new URLSearchParams(window.location.search);
             const targetNr = urlParams.get('nr');
             if (targetNr) {
@@ -267,20 +318,15 @@
                 }
             }
 
-            // 2. Fallback to Today
             const now = new Date();
             const todayStr = now.toLocaleDateString('de-DE');
-
             let bestIdx = -1;
             items.forEach((item, idx) => {
                 const itemDateStr = item.datum.split(' ')[0];
-                if (itemDateStr === todayStr) {
-                    bestIdx = idx;
-                }
+                if (itemDateStr === todayStr) bestIdx = idx;
             });
 
             if (bestIdx === -1) {
-                // Fallback to closest if no exact today found
                 let minDiff = Infinity;
                 items.forEach((item, idx) => {
                     const [dStr, tStr] = item.datum.split(' ');
@@ -347,14 +393,21 @@
             debug.textContent = `Tag ${item.nr} (${currentIndex + 1}/${items.length})`;
         }
 
-        function navigate(dir) {
-            // dir: 1 for next day (higher NR), -1 for previous day (lower NR)
-            let newIndex = currentIndex - dir;
-            if (newIndex >= 0 && newIndex < items.length) {
+        function navigate(dir, step = 1) {
+            // dir: 1 for next day (Higher NR, lower index), -1 for prev day (Lower NR, higher index)
+            // step navigation
+            let delta = dir * step;
+            let newIndex = currentIndex - delta;
+
+            // Boundary checks
+            if (newIndex < 0) newIndex = 0;
+            if (newIndex >= items.length) newIndex = items.length - 1;
+
+            if (newIndex !== currentIndex) {
                 currentIndex = newIndex;
                 cardMain.style.transition = 'none';
                 cardMain.style.opacity = '0';
-                cardMain.style.transform = dir > 0 ? 'translateX(30px)' : 'translateX(-30px)';
+                cardMain.style.transform = delta > 0 ? 'translateX(30px)' : 'translateX(-30px)';
                 setTimeout(() => {
                     renderCurrent();
                     cardMain.style.transition = 'all 0.25s ease-out';
@@ -369,43 +422,19 @@
             setTimeout(() => document.getElementById('loading').style.display = 'none', 300);
         }
 
-        let startX = 0;
-        let startTime = 0;
-
-        container.addEventListener('touchstart', e => {
-            startX = e.touches[0].clientX;
-            startTime = Date.now();
-        }, { passive: true });
-
-        container.addEventListener('touchend', e => {
-            const endX = e.changedTouches[0].clientX;
-            const endTime = Date.now();
-            const diffX = Math.abs(endX - startX);
-            const duration = endTime - startTime;
-
-            if (diffX < 10 && duration < 300) {
-                const width = window.innerWidth;
-                if (endX > width / 2) {
-                    navigate(1); // Right -> Next Day
-                } else {
-                    navigate(-1); // Left -> Prev Day
-                }
-            }
-        }, { passive: true });
-
-        container.addEventListener('click', e => {
-            if (window.getSelection().toString()) return;
-            const width = window.innerWidth;
-            if (e.clientX > width / 2) {
-                navigate(1);
-            } else {
-                navigate(-1);
-            }
-        });
-
+        // Keyboard support
         document.addEventListener('keydown', e => {
-            if (e.key === 'ArrowLeft') navigate(-1);
-            if (e.key === 'ArrowRight') navigate(1);
+            const key = e.key.toLowerCase();
+
+            // 1 step (Next)
+            if (key === 'arrowright' || key === 'd') navigate(1, 1);
+            // 1 step (Prev)
+            if (key === 'arrowleft' || key === 'a') navigate(-1, 1);
+
+            // 10 steps (Next)
+            if (key === 'arrowup' || key === 'w') navigate(1, 10);
+            // 10 steps (Prev)
+            if (key === 'arrowdown' || key === 's') navigate(-1, 10);
         });
 
         init();
