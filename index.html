@@ -504,7 +504,7 @@
             margin-top: 4px;
             word-break: break-word;
         }
-        
+
         .preview-metadata {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
@@ -513,21 +513,20 @@
             padding-top: 12px;
             border-top: 1px solid #e2e8f0;
         }
-        
+
         .preview-metadata .preview-field {
             margin-bottom: 0;
         }
-        
+
         .preview-metadata .preview-val {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             font-size: 0.95rem;
         }
-        
+
         @media (max-width: 768px) {
             .preview-metadata {
                 grid-template-columns: 1fr;
             }
-        }
         }
 
         /* Tweet Styling */
@@ -655,7 +654,12 @@
 
     <div class="container">
         <div class="header-area">
-            <h1>🚀 Shorty Manager</h1>
+            <div>
+                <h1>🚀 Shorty Manager</h1>
+                <a href="swipe.html" id="swipe-link" class="btn"
+                    style="background: #6b46c1; text-decoration: none; vertical-align: middle; margin-top: -5px; display: inline-block;">📱
+                    Swipe View</a>
+            </div>
 
             <div class="project-selector-container">
                 <select id="project-select" onchange="changeProject(this.value)">
@@ -721,11 +725,19 @@
             return params.get('project');
         }
 
+        function updateSwipeLink(projectId) {
+            const link = document.getElementById('swipe-link');
+            if (link && projectId) {
+                link.href = `swipe.html?project=${projectId}`;
+            }
+        }
+
         function changeProject(projectId) {
             if (projectId) {
                 const url = new URL(window.location);
                 url.searchParams.set('project', projectId);
                 window.history.pushState({}, '', url);
+                updateSwipeLink(projectId);
                 loadData();
             }
         }
@@ -1069,15 +1081,15 @@
                             if (data.tags) {
                                 html += `<div class="preview-field"><div class="preview-label">Tags</div><div class="preview-val">${Array.isArray(data.tags) ? data.tags.join(', ') : data.tags}</div></div>`;
                             }
-                            
+
                             // New metadata fields in a grid layout
                             const hasMetadata = data.categoryName || data.languageName || data.privacyStatusName || data.publishDateDisplay || data.containsSyntheticMediaName;
                             if (hasMetadata) {
                                 html += `<div class="preview-metadata">`;
-                                
+
                                 if (data.categoryName) {
-                                    const categoryInfo = data.isRefresh && data.currentCategoryName ? 
-                                        `${data.categoryName} <span style="color: #718096; font-size: 0.85em;">(aktuell: ${data.currentCategoryName})</span>` : 
+                                    const categoryInfo = data.isRefresh && data.currentCategoryName ?
+                                        `${data.categoryName} <span style="color: #718096; font-size: 0.85em;">(aktuell: ${data.currentCategoryName})</span>` :
                                         data.categoryName;
                                     html += `<div class="preview-field"><div class="preview-label">Kategorie</div><div class="preview-val">${categoryInfo}</div></div>`;
                                 }
@@ -1093,10 +1105,10 @@
                                 if (data.containsSyntheticMediaName !== undefined) {
                                     html += `<div class="preview-field"><div class="preview-label">Veränderte Inhalte</div><div class="preview-val">${data.containsSyntheticMediaName}</div></div>`;
                                 }
-                                
+
                                 html += `</div>`;
                             }
-                            
+
                             html += `</div>`;
                         }
 

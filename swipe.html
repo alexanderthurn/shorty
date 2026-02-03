@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Shorty Swipe</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #000000;
+            --card-bg: #111111;
+            --text: #ffffff;
+            --text-dim: #a0a0a0;
+            --accent: #3498db;
+            --safe-top: env(safe-area-inset-top, 0px);
+            --safe-bottom: env(safe-area-inset-bottom, 0px);
+        }
+
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: 'Inter', -apple-system, system-ui, sans-serif;
+            overflow: hidden;
+        }
+
+        #app {
+            height: 100%;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            padding: 10px 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.85rem;
+            color: var(--text-dim);
+            border-bottom: 1px solid #222;
+            flex-shrink: 0;
+            z-index: 100;
+            background: var(--bg);
+            position: sticky;
+            top: 0;
+            transition: background 0.3s;
+        }
+
+        .header.today {
+            background: #2d3748;
+            color: #fff;
+            border-bottom: 1px solid var(--accent);
+        }
+
+        .header .nr {
+            font-weight: bold;
+            color: var(--accent);
+        }
+
+        .header.today .nr {
+            color: #4fd1c5;
+        }
+
+        .video-status {
+            font-size: 0.7rem;
+            padding: 2px 5px;
+            border-radius: 4px;
+            margin-left: 8px;
+            display: inline-block;
+            vertical-align: middle;
+            font-weight: bold;
+        }
+
+        .video-ok {
+            background: #22543d;
+            color: #c6f6d5;
+        }
+
+        .video-none {
+            background: #742a2a;
+            color: #fed7d7;
+        }
+
+        .content-container {
+            flex-grow: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            background-color: var(--bg);
+            transition: opacity 0.2s, transform 0.2s;
+            padding-bottom: 80px;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            margin: 0 0 12px 0;
+            line-height: 1.25;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .key-info {
+            font-size: 0.95rem;
+            line-height: 1.4;
+            color: var(--text-dim);
+            margin-bottom: 15px;
+            padding-left: 10px;
+            border-left: 2px solid var(--accent);
+            font-style: italic;
+        }
+
+        .infos {
+            font-size: 1.1rem;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            flex-grow: 1;
+        }
+
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--bg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            transition: opacity 0.3s;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #333;
+            border-top: 3px solid var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .debug {
+            position: fixed;
+            bottom: 5px;
+            right: 5px;
+            font-size: 10px;
+            color: #444;
+            pointer-events: none;
+            z-index: 100;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="loading" class="loading-overlay">
+        <div class="spinner"></div>
+    </div>
+
+    <div id="app">
+        <div class="header" id="header">
+            <div>
+                <span class="nr" id="header-nr">-</span>
+                <span id="header-date">-</span>
+                <span id="video-status" class="video-status"></span>
+            </div>
+            <span id="today-flag" style="font-weight:bold; color:#4fd1c5; display:none;">HEUTE</span>
+        </div>
+        <div class="content-container" id="container">
+            <div id="card-main" class="card">
+                <h1 id="title">...</h1>
+                <div id="key-info" class="key-info"></div>
+                <div id="infos" class="infos"></div>
+            </div>
+        </div>
+    </div>
+    <div class="debug" id="debug"></div>
+
+    <script>
+        let items = [];
+        let currentIndex = -1;
+        let projectId = 'default';
+        let isLoading = false;
+
+        const container = document.getElementById('container');
+        const cardMain = document.getElementById('card-main');
+        const debug = document.getElementById('debug');
+
+        async function init() {
+            try {
+                const urlParams = new URLSearchParams(window.location.search);
+                const projectsResp = await fetch('list.php');
+                const projectsData = await projectsResp.json();
+                projectId = urlParams.get('project') || projectsData.default_project || 'default';
+
+                await fetchAll();
+                hideLoading();
+            } catch (e) {
+                console.error(e);
+                alert("Fehler: " + e.message);
+            }
+        }
+
+        async function fetchAll() {
+            if (isLoading) return;
+            isLoading = true;
+            let url = `list.php?project=${projectId}&detaillevel=full`;
+            try {
+                const resp = await fetch(url);
+                const json = await resp.json();
+                if (json.success) {
+                    items = json.data;
+                    if (currentIndex === -1) {
+                        findTodayIndex();
+                        renderCurrent();
+                    }
+                }
+            } finally {
+                isLoading = false;
+            }
+        }
+
+        function findTodayIndex() {
+            if (items.length === 0) return;
+
+            // 1. Check URL for specific NR
+            const urlParams = new URLSearchParams(window.location.search);
+            const targetNr = urlParams.get('nr');
+            if (targetNr) {
+                const idx = items.findIndex(item => item.nr == targetNr);
+                if (idx !== -1) {
+                    currentIndex = idx;
+                    return;
+                }
+            }
+
+            // 2. Fallback to Today
+            const now = new Date();
+            const todayStr = now.toLocaleDateString('de-DE');
+
+            let bestIdx = -1;
+            items.forEach((item, idx) => {
+                const itemDateStr = item.datum.split(' ')[0];
+                if (itemDateStr === todayStr) {
+                    bestIdx = idx;
+                }
+            });
+
+            if (bestIdx === -1) {
+                // Fallback to closest if no exact today found
+                let minDiff = Infinity;
+                items.forEach((item, idx) => {
+                    const [dStr, tStr] = item.datum.split(' ');
+                    const [day, month, year] = dStr.split('.');
+                    const [h, m] = tStr.split(':');
+                    const date = new Date(year, month - 1, day, h, m);
+                    const diff = Math.abs(now - date);
+                    if (diff < minDiff) {
+                        minDiff = diff;
+                        bestIdx = idx;
+                    }
+                });
+            }
+            currentIndex = bestIdx;
+        }
+
+        function updateUrl() {
+            if (currentIndex >= 0 && currentIndex < items.length) {
+                const item = items[currentIndex];
+                const url = new URL(window.location);
+                url.searchParams.set('nr', item.nr);
+                window.history.replaceState({}, '', url);
+            }
+        }
+
+        function renderCurrent() {
+            if (currentIndex < 0 || currentIndex >= items.length) return;
+            const item = items[currentIndex];
+
+            updateUrl();
+
+            const now = new Date();
+            const todayStr = now.toLocaleDateString('de-DE');
+            const itemDateStr = item.datum.split(' ')[0];
+            const isToday = itemDateStr === todayStr;
+
+            document.getElementById('header').classList.toggle('today', isToday);
+            document.getElementById('today-flag').style.display = isToday ? 'inline' : 'none';
+
+            document.getElementById('header-nr').textContent = `Tag ${item.nr}`;
+            document.getElementById('header-date').textContent = isToday ? 'Heute' : itemDateStr;
+
+            const videoEl = document.getElementById('video-status');
+            if (item.hasMp4) {
+                videoEl.textContent = '🎬 DRIVE';
+                videoEl.className = 'video-status video-ok';
+            } else {
+                videoEl.textContent = '🎬 FEHLT';
+                videoEl.className = 'video-status video-none';
+            }
+
+            document.getElementById('title').textContent = item.titel.replace(`Tag ${item.nr} - `, '').replace('Kein Titel', 'Ohne Titel');
+
+            const keyInfoEl = document.getElementById('key-info');
+            if (item.keyInfo && item.keyInfo.trim()) {
+                keyInfoEl.textContent = item.keyInfo;
+                keyInfoEl.style.display = 'block';
+            } else {
+                keyInfoEl.style.display = 'none';
+            }
+
+            document.getElementById('infos').textContent = item.infos;
+            cardMain.scrollTop = 0;
+            debug.textContent = `Tag ${item.nr} (${currentIndex + 1}/${items.length})`;
+        }
+
+        function navigate(dir) {
+            // dir: 1 for next day (higher NR), -1 for previous day (lower NR)
+            let newIndex = currentIndex - dir;
+            if (newIndex >= 0 && newIndex < items.length) {
+                currentIndex = newIndex;
+                cardMain.style.transition = 'none';
+                cardMain.style.opacity = '0';
+                cardMain.style.transform = dir > 0 ? 'translateX(30px)' : 'translateX(-30px)';
+                setTimeout(() => {
+                    renderCurrent();
+                    cardMain.style.transition = 'all 0.25s ease-out';
+                    cardMain.style.opacity = '1';
+                    cardMain.style.transform = 'translateX(0)';
+                }, 50);
+            }
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').style.opacity = '0';
+            setTimeout(() => document.getElementById('loading').style.display = 'none', 300);
+        }
+
+        let startX = 0;
+        let startTime = 0;
+
+        container.addEventListener('touchstart', e => {
+            startX = e.touches[0].clientX;
+            startTime = Date.now();
+        }, { passive: true });
+
+        container.addEventListener('touchend', e => {
+            const endX = e.changedTouches[0].clientX;
+            const endTime = Date.now();
+            const diffX = Math.abs(endX - startX);
+            const duration = endTime - startTime;
+
+            if (diffX < 10 && duration < 300) {
+                const width = window.innerWidth;
+                if (endX > width / 2) {
+                    navigate(1); // Right -> Next Day
+                } else {
+                    navigate(-1); // Left -> Prev Day
+                }
+            }
+        }, { passive: true });
+
+        container.addEventListener('click', e => {
+            if (window.getSelection().toString()) return;
+            const width = window.innerWidth;
+            if (e.clientX > width / 2) {
+                navigate(1);
+            } else {
+                navigate(-1);
+            }
+        });
+
+        document.addEventListener('keydown', e => {
+            if (e.key === 'ArrowLeft') navigate(-1);
+            if (e.key === 'ArrowRight') navigate(1);
+        });
+
+        init();
+    </script>
+</body>
+
+</html>
