@@ -283,6 +283,9 @@
         <button class="nav-btn" id="btn-prev" onclick="navigate(-1)">
             &laquo; Prev
         </button>
+        <button class="nav-btn" id="btn-play" onclick="togglePlay()">
+            Play 🔊
+        </button>
         <button class="nav-btn" id="btn-next" onclick="navigate(1)">
             Next &raquo;
         </button>
@@ -294,6 +297,9 @@
         let projectId = 'default';
         let isLoading = false;
         let isFullMode = false;
+        let isPlaying = false;
+        let synth = window.speechSynthesis;
+        let currentUtterance = null;
 
         const container = document.getElementById('container');
         const cardMain = document.getElementById('card-main');
@@ -438,9 +444,53 @@
             renderCurrent();
         }
 
+        function stopSpeaking() {
+            if (synth.speaking) {
+                synth.cancel();
+            }
+            isPlaying = false;
+            updatePlayButton();
+        }
+
+        function togglePlay() {
+            if (isPlaying) {
+                stopSpeaking();
+            } else {
+                startSpeaking();
+            }
+        }
+
+        function startSpeaking() {
+            stopSpeaking();
+            const textToRead = infosEl.textContent;
+            if (!textToRead) return;
+
+            currentUtterance = new SpeechSynthesisUtterance(textToRead);
+            currentUtterance.lang = 'de-DE';
+            currentUtterance.onend = () => {
+                isPlaying = false;
+                updatePlayButton();
+            };
+            currentUtterance.onerror = () => {
+                isPlaying = false;
+                updatePlayButton();
+            };
+
+            isPlaying = true;
+            updatePlayButton();
+            synth.speak(currentUtterance);
+        }
+
+        function updatePlayButton() {
+            const btn = document.getElementById('btn-play');
+            btn.innerHTML = isPlaying ? 'Stop ⏹' : 'Play 🔊';
+            btn.style.color = isPlaying ? '#e53e3e' : '#fff';
+        }
+
         keyInfoEl.addEventListener('click', toggleFullMode);
 
         function navigate(dir, step = 1) {
+            stopSpeaking();
             // dir: 1 for next day (Higher NR, lower index), -1 for prev day (Lower NR, higher index)
             // step navigation
             let delta = dir * step;
